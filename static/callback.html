@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Back from the bank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <p class="wordmark"><a href="/" style="color:inherit;text-decoration:none">Payment agent</a></p>
+    <p class="sandbox-flag">
+      <span class="dot" aria-hidden="true"></span>
+      <span>TrueLayer sandbox · test money only</span>
+    </p>
+  </div>
+</header>
+
+<main class="wrap callback">
+  <h1 id="headline">Back from the bank.</h1>
+  <p class="lede-line" id="summary">Asking TrueLayer what happened to this payment.</p>
+
+  <ol class="spine" id="after" aria-live="polite">
+    <li data-node="agent" data-state="done">
+      <span class="marker" aria-hidden="true"></span>
+      <div><p class="label">The agent created the payment</p><p class="detail">it stopped there, as designed</p></div>
+    </li>
+    <li data-node="sca" data-state="done">
+      <span class="marker" aria-hidden="true"></span>
+      <div><p class="label">You authenticated at the bank</p><p class="detail">the step no agent may take</p></div>
+    </li>
+    <li data-node="settled" data-state="running">
+      <span class="marker" aria-hidden="true"></span>
+      <div><p class="label">The provider confirms the outcome</p><p class="detail" id="settle-detail">checking</p></div>
+    </li>
+  </ol>
+
+  <dl class="facts" id="facts" hidden>
+    <div><dt>Payment id</dt><dd id="fact-id"></dd></div>
+    <div><dt>Status</dt><dd id="fact-status"></dd></div>
+    <div><dt>Amount</dt><dd id="fact-amount"></dd></div>
+  </dl>
+
+  <p class="callback-actions"><a class="sca-link" href="/">Send another instruction</a></p>
+</main>
+
+<script>
+const params = new URLSearchParams(location.search);
+const paymentId = params.get("payment_id");
+const headline = document.getElementById("headline");
+const summary = document.getElementById("summary");
+const settleRow = document.querySelector('#after li[data-node="settled"]');
+const settleDetail = document.getElementById("settle-detail");
+const facts = document.getElementById("facts");
+
+// TrueLayer moves a payment through authorizing, authorized, then executed
+// and finally settled. Executed is the point where the money has actually
+// been sent, so that is what we wait for rather than a redirect landing.
+const FINISHED = ["executed", "settled", "failed"];
+
+// TrueLayer appends an error when the payer backs out at the bank, which is
+// a normal thing to do and reads very differently from a payment that failed.
+const abandoned = params.get("error") === "tl_hpp_abandoned";
+
+if (!paymentId) {
+  headline.textContent = "No payment in this link.";
+  summary.textContent = "The bank returns here with a payment_id. Start a payment from the front page and the link will carry one.";
+  settleRow.dataset.state = "skipped";
+  settleDetail.textContent = "nothing to check";
+} else if (abandoned) {
+  document.querySelector('#after li[data-node="sca"]').dataset.state = "refused";
+  document.querySelector('#after li[data-node="sca"] .detail').textContent = "you left before authenticating";
+  settleRow.dataset.state = "skipped";
+  settleDetail.textContent = "not reached";
+  headline.textContent = "You stopped at the bank.";
+  summary.textContent = "The agent had done its part and handed over. You closed the bank screen without authenticating, so no money moved. That is the escape hatch working, not an error.";
+  poll(0);
+} else {
+  poll(0);
+}
+
+async function poll(attempt) {
+  try {
+    const response = await fetch(`/api/payment/${encodeURIComponent(paymentId)}`);
+    if (!response.ok) throw new Error("could not read that payment");
+    const payment = await response.json();
+
+    document.getElementById("fact-id").textContent = payment.payment_id;
+    document.getElementById("fact-status").textContent = payment.status || "unknown";
+    document.getElementById("fact-amount").textContent =
+      payment.amount_in_minor != null
+        ? `${(payment.amount_in_minor / 100).toFixed(2)} ${payment.currency || ""}`.trim()
+        : "";
+    facts.hidden = false;
+
+    if (FINISHED.includes(payment.status)) {
+      const failed = payment.status === "failed";
+      // When the payer abandoned, the provider also reports "failed". The
+      // wording is already set and is more accurate, so leave it alone.
+      if (!abandoned) {
+        settleRow.dataset.state = failed ? "refused" : "done";
+        settleDetail.textContent = payment.status;
+        headline.textContent = failed ? "The payment failed at the bank." : "Done. The payment went through.";
+        summary.textContent = failed
+          ? "The provider reports this payment as failed. Nothing was taken, and no agent decision was involved."
+          : "One instruction, one check of the payee, one human decision, one authentication. The agent never held the authority to skip the last two.";
+      }
+      return;
+    }
+
+    settleDetail.textContent = `${payment.status}, still moving`;
+    if (attempt < 12) {
+      setTimeout(() => poll(attempt + 1), 2000);
+    } else {
+      settleRow.dataset.state = "attention";
+      settleDetail.textContent = `${payment.status} · stopped checking after 24 seconds`;
+      summary.textContent = "Sandbox payments occasionally sit in an intermediate state. Reload to check again.";
+    }
+  } catch (error) {
+    settleRow.dataset.state = "refused";
+    settleDetail.textContent = error.message;
+    headline.textContent = "Could not read that payment.";
+    summary.textContent = "The provider did not return a status for this id.";
+  }
+}
+</script>
+</body>
+</html>

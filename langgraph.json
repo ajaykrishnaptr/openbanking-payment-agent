@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "payment_agent": "./graph/app.py:graph"
+  },
+  "env": ".env"
+}

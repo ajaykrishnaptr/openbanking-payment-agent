@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A payment agent that stops and asks</title>
+<meta name="description" content="An Open Banking payment agent that verifies the payee, checks consent, scores risk, then pauses for a human before money moves. Runs on the TrueLayer sandbox with test money.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <p class="wordmark">Payment agent</p>
+    <p class="sandbox-flag" id="mode-flag">
+      <span class="dot" aria-hidden="true"></span>
+      <span>TrueLayer sandbox · test money only</span>
+    </p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="lede">
+    <h1>An agent that will not pay without asking you first.</h1>
+    <p>
+      Give it a payment to make. It checks the payee name against the account, checks the
+      consent is still valid, scores the risk, and then stops. It tells you why it stopped,
+      and you decide. Only after you approve does it create a payment, and even then the bank
+      asks you to authenticate, because that step is yours and not the agent's.
+    </p>
+    <p class="disclosure">
+      Every payment runs on the TrueLayer sandbox with test money. The payee check is
+      simulated, since TrueLayer's Verification of Payee service is not available to
+      developers yet. Everything else is a real API call.
+    </p>
+  </section>
+
+  <div class="columns">
+
+    <section class="intent" aria-labelledby="intent-heading">
+      <h2 id="intent-heading">The instruction</h2>
+
+      <output class="ledger" id="ledger" for="payee_name amount">
+        <span class="ledger-amount" id="ledger-amount">42.00</span>
+        <span class="ledger-currency">GBP</span>
+        <span class="ledger-to">to <strong id="ledger-payee">Pinguin Pfannkuchen GmbH</strong></span>
+      </output>
+
+      <form id="intent-form" novalidate>
+        <div class="field">
+          <label for="payee_name">Pay</label>
+          <input id="payee_name" name="payee_name" type="text" autocomplete="off"
+                 value="Pinguin Pfannkuchen GmbH" required>
+          <p class="hint" id="payee_hint">The bank holds a name for each account. This one is checked against it.</p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="sort_code">Sort code</label>
+            <input id="sort_code" name="sort_code" class="mono" inputmode="numeric"
+                   value="040668" required>
+          </div>
+          <div class="field">
+            <label for="account_number">Account number</label>
+            <input id="account_number" name="account_number" class="mono" inputmode="numeric"
+                   value="00000871" required>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="amount">Amount (GBP)</label>
+            <input id="amount" name="amount" class="mono" inputmode="decimal" value="42.00" required>
+            <p class="hint" id="amount_hint">Over 1,000 the agent always asks a human.</p>
+          </div>
+          <div class="field">
+            <label for="reference">Reference</label>
+            <input id="reference" name="reference" type="text" value="invoice-88" maxlength="60">
+          </div>
+        </div>
+
+        <button class="primary" type="submit" id="run-btn">Send it to the agent</button>
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+      </form>
+
+      <div class="try">
+        <h3>Try making it refuse</h3>
+        <ul>
+          <li><button type="button" class="link" data-preset="partial">A name that nearly matches</button></li>
+          <li><button type="button" class="link" data-preset="nomatch">A name that does not match</button></li>
+          <li><button type="button" class="link" data-preset="unknown">An account it cannot check</button></li>
+          <li><button type="button" class="link" data-preset="large">An amount above the ceiling</button></li>
+          <li><button type="button" class="link" data-preset="injection">An instruction hidden in the reference</button></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="run" aria-labelledby="run-heading">
+      <h2 id="run-heading">The route</h2>
+      <p class="route-intro" id="run-empty">Every payment takes this path. The agent can stop at any station, and it stops at the fifth one whenever a decision is yours.</p>
+
+      <ol class="spine" id="steps" aria-live="polite">
+        <li data-node="check_input" data-state="idle">
+          <span class="marker" aria-hidden="true"></span>
+          <div><p class="label">Read the instruction</p><p class="detail"></p></div>
+        </li>
+        <li data-node="verify_payee" data-state="idle">
+          <span class="marker" aria-hidden="true"></span>
+          <div><p class="label">Check the payee against the account</p><p class="detail"></p></div>
+        </li>
+        <li data-node="check_consent" data-state="idle">
+          <span class="marker" aria-hidden="true"></span>
+          <div><p class="label">Check the consent is still valid</p><p class="detail"></p></div>
+        </li>
+        <li data-node="assess_risk" data-state="idle">
+          <span class="marker" aria-hidden="true"></span>
+          <div><p class="label">Score the risk</p><p class="detail"></p></div>
+        </li>
+        <li data-node="human_approval" data-state="idle" class="station-human">
+          <span class="marker" aria-hidden="true"></span>
+          <div><p class="label">Ask a human</p><p class="detail"></p></div>
+        </li>
+        <li data-node="execute_payment" data-state="idle">
+          <span class="marker" aria-hidden="true"></span>
+          <div><p class="label">Create the payment</p><p class="detail"></p></div>
+        </li>
+        <li data-node="reconcile" data-state="idle">
+          <span class="marker" aria-hidden="true"></span>
+          <div><p class="label">Confirm with the bank</p><p class="detail"></p></div>
+        </li>
+      </ol>
+
+      <div id="approval-slot"></div>
+      <div id="result-slot"></div>
+    </section>
+
+  </div>
+
+  <section class="internals" aria-labelledby="internals-heading">
+    <h2 id="internals-heading">What is underneath</h2>
+    <p class="route-intro">
+      Every number below is read from the running system: the graph shape from the compiled
+      graph, the eval results from the last recorded experiment. Nothing here is typed into the
+      page by hand.
+    </p>
+
+    <div class="internals-grid">
+
+      <article>
+        <h3>The graph</h3>
+        <p class="stat"><span id="node-count">9</span> nodes, <span id="edge-count">15</span> edges,
+        <span id="cond-count">10</span> of them conditional</p>
+        <p>
+          Built with LangGraph. The conditional edges are the product rules: a failed payee check
+          routes to a stop before consent is read, an amount over the ceiling routes to a human.
+          The pause is <span class="mono">interrupt()</span>, resumed with
+          <span class="mono">Command(resume=…)</span>, so the earlier checks never run twice.
+        </p>
+        <details>
+          <summary>Read the graph definition</summary>
+          <pre class="mermaid-src" id="mermaid-src">loading…</pre>
+        </details>
+      </article>
+
+      <article>
+        <h3>The evals</h3>
+        <p class="stat"><span id="eval-passed">13</span> of <span id="eval-total">13</span> cases passing</p>
+        <p>
+          Thirteen scenarios in a versioned LangSmith dataset, scored by five evaluators. Each case
+          asserts where the run ended and which nodes it must never have touched, because the
+          question worth asking of an agent with a payment API is whether it ever reached the node
+          that moves money.
+        </p>
+        <ul class="split-list" id="split-list"></ul>
+      </article>
+
+      <article>
+        <h3>The pause, and where it lives</h3>
+        <p class="stat" id="checkpointer-line">postgres</p>
+        <ul class="split-list" id="stored-list"></ul>
+        <p>
+          A paused run is written to a checkpointer, so an approval arriving later resumes it in a
+          different process entirely. On this deployment that is Neon Postgres in Frankfurt. Run it
+          locally without a database and it falls back to memory, which is why the eval suite needs
+          no configuration.
+        </p>
+      </article>
+
+    </div>
+
+    <details class="case-table-wrap">
+      <summary>Every eval case, and the guarantee it protects</summary>
+      <table class="case-table">
+        <thead><tr><th>Case</th><th>Split</th><th>Protects</th><th>Result</th></tr></thead>
+        <tbody id="case-rows"></tbody>
+      </table>
+    </details>
+  </section>
+
+  <section class="honesty">
+    <h2>What is real here, and what is not</h2>
+    <dl>
+      <div>
+        <dt>Real</dt>
+        <dd>OAuth against TrueLayer, request signing, <span class="mono">POST /v3/payments</span>,
+        the status read back from the provider afterwards, and the bank's own authentication screen.</dd>
+      </div>
+      <div>
+        <dt>Simulated</dt>
+        <dd>The payee check, because TrueLayer's Verification of Payee service is expected in
+        H2 2026 and is not available on a developer account today. It runs behind an adapter,
+        so the real service replaces one file when it ships. Consent records and payee history
+        are also stand-ins.</dd>
+      </div>
+      <div>
+        <dt>Never real</dt>
+        <dd>The money. Sandbox only.</dd>
+      </div>
+    </dl>
+    <p class="colophon">
+      Built with Claude Code. The graph, its routing rules and a twelve-scenario eval suite are
+      in the repository.
+    </p>
+  </section>
+
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

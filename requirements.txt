@@ -1,0 +1,8 @@
+fastapi==0.140.7
+langgraph==1.2.9
+langgraph-checkpoint-postgres==3.1.0
+psycopg[binary,pool]==3.3.4
+pydantic==2.13.4
+requests==2.34.2
+truelayer-signing==0.4.0
+uvicorn==0.51.0
