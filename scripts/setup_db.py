@@ -40,6 +40,13 @@ with _psycopg.connect(url, connect_timeout=20) as conn, conn.cursor() as cur:
     conn.commit()
 print("rate limit table ready")
 
+from graph.audit import DDL as AUDIT_DDL
+
+with _psycopg.connect(url, connect_timeout=20) as conn, conn.cursor() as cur:
+    cur.execute(AUDIT_DDL)
+    conn.commit()
+print("audit table ready")
+
 import psycopg
 
 with psycopg.connect(url, connect_timeout=20) as conn, conn.cursor() as cur:

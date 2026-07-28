@@ -845,3 +845,37 @@ button.link:hover { border-bottom-color: var(--primary); }
   .trace-list li { grid-template-columns: 1fr auto; }
   .trace-bar { display: none; }
 }
+
+/* ---------------------------------------------------------- activity */
+
+.activity { padding-bottom: 4rem; }
+.activity .lede { max-width: 64ch; }
+
+.activity-summary {
+  margin: 0 0 2rem;
+  padding: 1.1rem 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.activity-table-wrap { overflow-x: auto; }
+.activity-table { min-width: 46rem; }
+.activity-table td { white-space: nowrap; }
+.activity-table td:nth-child(2) { white-space: normal; }
+
+.faint { color: var(--ink-faint); font-size: 0.78rem; }
+
+.pill {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+}
+
+.pill[data-tone="done"] { color: var(--primary); border-color: var(--primary); }
+.pill[data-tone="attention"] { color: var(--attention); border-color: var(--attention-line); }
+.pill[data-tone="refused"] { color: var(--refuse); border-color: oklch(0.80 0.09 25); }
+
+.masthead .wordmark a { color: inherit; text-decoration: none; }

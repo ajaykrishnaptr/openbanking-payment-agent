@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 from langgraph.types import Command
 
 from api import ratelimit
-from graph import policy
+from graph import audit, policy
 from graph.app import builder
 from graph.checkpointer import describe as checkpointer_name, get_checkpointer
 
@@ -327,6 +327,8 @@ def run(intent: Intent, request: Request) -> JSONResponse:
         },
         run_config(thread_id),
     )
+    if "__interrupt__" not in state:
+        audit.record(thread_id, state)
     return JSONResponse(view(thread_id, state))
 
 
@@ -385,6 +387,9 @@ def stream_graph(thread_id: str, graph_input) -> Iterator[str]:
     state = dict(snapshot.values)
     if snapshot.tasks and snapshot.tasks[0].interrupts:
         state["__interrupt__"] = snapshot.tasks[0].interrupts
+    else:
+        # The run is over, so the decision is final and can be recorded.
+        audit.record(thread_id, state, decided_by="human" if state.get("human_decision") else None)
     yield sse({"event": "final", "view": view(thread_id, state)})
 
 
@@ -434,6 +439,8 @@ def decide(decision: Decision, request: Request) -> JSONResponse:
         state = graph.invoke(Command(resume=decision.decision), config)
     except Exception as exc:  # a thread that no longer exists, most likely
         raise HTTPException(404, f"That run is no longer available: {exc}") from exc
+    if "__interrupt__" not in state:
+        audit.record(decision.thread_id, state, decided_by="human")
     return JSONResponse(view(decision.thread_id, state))
 
 
@@ -500,6 +507,31 @@ def checkpoint_stats() -> dict | None:
 
     _stats_cache.update({"at": time.time(), "value": value})
     return value
+
+
+@app.get("/api/activity")
+def activity(limit: int = 25) -> JSONResponse:
+    """The audit trail: one row per completed run, newest first.
+
+    Separate from the checkpoints on purpose. This is the record a reviewer
+    would ask for, and it is queryable by payee, amount and outcome without
+    deserialising framework state.
+    """
+    try:
+        return JSONResponse(
+            {
+                "summary": audit.summary(),
+                "rows": audit.recent(min(limit, 100)),
+                "ruleset_version": audit.RULESET_VERSION,
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"Could not read the audit log: {exc}") from exc
+
+
+@app.get("/activity")
+def activity_page() -> FileResponse:
+    return FileResponse(STATIC / "activity.html")
 
 
 @app.get("/api/internals")

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activity — every decision this agent has made</title>
+<meta name="description" content="The audit trail for an Open Banking payment agent: one row per completed run, with the payee check, the consent, the risk flags, who decided, and the payment it produced.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <p class="wordmark"><a href="/">Payment agent</a></p>
+    <p class="sandbox-flag">
+      <span class="dot" aria-hidden="true"></span>
+      <span>TrueLayer sandbox · test money only</span>
+    </p>
+  </div>
+</header>
+
+<main class="wrap activity">
+
+  <section class="lede">
+    <h1>Every decision this agent has made.</h1>
+    <p>
+      One row per completed run, written once and never changed. It records what the payee check
+      returned and which provider produced it, whether the consent was valid, what the risk rules
+      flagged, who decided, and which payment came out the other end.
+    </p>
+    <p class="disclosure">
+      This is a separate record from the checkpoints that let a paused run resume. Those exist to
+      restart work and their shape belongs to the framework. This table exists to answer questions
+      afterwards, so it is indexed by payee, amount and date, and it stores only the last four
+      digits of an account number.
+    </p>
+  </section>
+
+  <dl class="facts activity-summary" id="summary"></dl>
+
+  <div class="activity-table-wrap">
+    <table class="case-table activity-table">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Payee</th>
+          <th>Amount</th>
+          <th>Payee check</th>
+          <th>Consent</th>
+          <th>Decided by</th>
+          <th>Outcome</th>
+          <th>Payment</th>
+        </tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="8">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <p class="colophon" id="ruleset"></p>
+</main>
+
+<script>
+const TONE = { MATCH: "done", PARTIAL: "attention", NO_MATCH: "refused", MATCH_NOT_POSSIBLE: "refused" };
+
+function esc(v) {
+  return String(v == null ? "" : v)
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+function when(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+fetch("/api/activity")
+  .then((r) => r.json())
+  .then((data) => {
+    const s = data.summary || {};
+    document.getElementById("summary").innerHTML = `
+      <div><dt>Runs recorded</dt><dd>${esc(s.total ?? 0)}</dd></div>
+      <div><dt>Payments created</dt><dd>${esc(s.paid ?? 0)}</dd></div>
+      <div><dt>Decided by a human</dt><dd>${esc(s.human_decided ?? 0)}</dd></div>
+      <div><dt>Stopped by a rule</dt><dd>${esc(s.held ?? 0)}</dd></div>`;
+
+    document.getElementById("ruleset").textContent =
+      `Rules in force: ${data.ruleset_version}. Every row records the version that applied when the decision was made.`;
+
+    const rows = data.rows || [];
+    document.getElementById("rows").innerHTML = rows.length
+      ? rows.map((r) => `
+        <tr data-ok="${r.payment_id ? "true" : "false"}">
+          <td class="mono">${esc(when(r.recorded_at))}</td>
+          <td>${esc(r.payee_name)}${r.account_last4 ? ` <span class="mono faint">••${esc(r.account_last4)}</span>` : ""}</td>
+          <td class="mono">${r.amount_minor != null ? (r.amount_minor / 100).toFixed(2) : ""} ${esc(r.currency || "")}</td>
+          <td><span class="pill" data-tone="${TONE[r.vop_status] || "idle"}">${esc(r.vop_status || "—")}</span>
+              ${r.vop_confidence != null ? `<span class="mono faint">${r.vop_confidence.toFixed(2)}</span>` : ""}</td>
+          <td>${esc(r.consent_status || "—")}</td>
+          <td>${esc(r.decided_by)}${r.decision ? ` · ${esc(r.decision)}` : ""}</td>
+          <td>${esc(r.outcome)}</td>
+          <td class="mono">${r.payment_id ? esc(r.payment_id.slice(0, 8)) + "…" : "—"}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="8">Nothing recorded yet. Run a payment on the <a href="/">front page</a> and it appears here.</td></tr>`;
+  })
+  .catch(() => {
+    document.getElementById("rows").innerHTML = '<tr><td colspan="8">Could not read the audit log.</td></tr>';
+  });
+</script>
+</body>
+</html>
