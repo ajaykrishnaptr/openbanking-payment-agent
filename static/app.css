@@ -799,3 +799,49 @@ button.link:hover { border-bottom-color: var(--primary); }
   font-size: 0.88rem !important;
   color: var(--ink-muted);
 }
+
+/* ------------------------------------------------------------- trace */
+
+.trace-wrap { margin-top: 1.25rem; }
+
+.trace-wrap summary {
+  cursor: pointer;
+  font-size: 0.86rem;
+  color: var(--primary);
+}
+
+.trace-status {
+  margin: 0.9rem 0 0.6rem;
+  font-size: 0.84rem;
+  color: var(--ink-muted);
+}
+
+.trace-list { margin: 0; padding: 0; list-style: none; }
+
+.trace-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 14rem) 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.3rem 0;
+  font-size: 0.84rem;
+}
+
+.trace-label { color: var(--ink); }
+
+/* Width is the share of the slowest step, so the network call is visibly the
+   expensive one and the local checks are visibly not. */
+.trace-bar {
+  height: 6px;
+  width: var(--w);
+  min-width: 2px;
+  background: var(--primary);
+  border-radius: 1px;
+}
+
+.trace-ms { color: var(--ink-muted); font-size: 0.78rem; }
+
+@media (max-width: 560px) {
+  .trace-list li { grid-template-columns: 1fr auto; }
+  .trace-bar { display: none; }
+}

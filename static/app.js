@@ -205,6 +205,54 @@ function resetStations() {
   });
 }
 
+/* Timings come from LangSmith, a few seconds after the run ends. Asked for on
+   demand rather than polled, so a visitor who does not care costs nothing. */
+async function loadTrace(threadId, container, attempt = 0) {
+  container.innerHTML = '<p class="trace-status">Reading the trace…</p>';
+  try {
+    const data = await (await fetch(`/api/trace/${encodeURIComponent(threadId)}`)).json();
+
+    if (data.status === "pending" && attempt < 6) {
+      container.innerHTML = '<p class="trace-status">The trace is still being indexed…</p>';
+      return setTimeout(() => loadTrace(threadId, container, attempt + 1), 2500);
+    }
+    if (data.status !== "ready" || !data.spans.length) {
+      container.innerHTML = `<p class="trace-status">No trace available (${escapeHtml(data.status)}).</p>`;
+      return;
+    }
+
+    const slowest = Math.max(...data.spans.map((s) => s.ms));
+    container.innerHTML = `
+      <p class="trace-status">Measured, not estimated. ${data.total_ms} ms of agent time across ${data.spans.length} steps${
+        data.roots > 1 ? `, in ${data.roots} requests either side of your decision` : ""
+      }. The wait for your decision is not counted: these are the agent's own steps.</p>
+      <ul class="trace-list">
+        ${data.spans.map((s) => `
+          <li>
+            <span class="trace-label">${escapeHtml(s.label)}</span>
+            <span class="trace-bar" style="--w:${Math.max(2, (s.ms / slowest) * 100)}%"></span>
+            <span class="mono trace-ms">${s.ms} ms</span>
+          </li>`).join("")}
+      </ul>`;
+  } catch (err) {
+    container.innerHTML = '<p class="trace-status">Could not read the trace.</p>';
+  }
+}
+
+function renderTracePanel(view) {
+  const wrap = document.createElement("details");
+  wrap.className = "trace-wrap";
+  wrap.innerHTML = `<summary>How long each step took</summary><div class="trace-body"></div>`;
+  const body = wrap.querySelector(".trace-body");
+  wrap.addEventListener("toggle", () => {
+    if (wrap.open && !body.dataset.loaded) {
+      body.dataset.loaded = "1";
+      loadTrace(view.thread_id, body);
+    }
+  }, { once: false });
+  resultSlot.appendChild(wrap);
+}
+
 function finish(view) {
   approvalSlot.innerHTML = "";
   resultSlot.innerHTML = "";
@@ -219,6 +267,7 @@ function finish(view) {
     markStopped(view);
     markAutoApproved(view);
     renderResult(view);
+    renderTracePanel(view);
   }
 }
 

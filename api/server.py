@@ -325,13 +325,23 @@ def run(intent: Intent, request: Request) -> JSONResponse:
             "currency": "GBP",
             "reference": intent.reference.strip() or "agent-payment",
         },
-        {"configurable": {"thread_id": thread_id}},
+        run_config(thread_id),
     )
     return JSONResponse(view(thread_id, state))
 
 
 def sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
+
+
+def run_config(thread_id: str) -> dict:
+    """Thread id for the checkpointer, plus metadata so the trace for this run
+    can be found again in LangSmith without storing a run id ourselves."""
+    return {
+        "configurable": {"thread_id": thread_id},
+        "metadata": {"thread_id": thread_id, "app": "payment-agent"},
+        "run_name": "payment-run",
+    }
 
 
 def stream_graph(thread_id: str, graph_input) -> Iterator[str]:
@@ -341,7 +351,7 @@ def stream_graph(thread_id: str, graph_input) -> Iterator[str]:
     payee check is instant because it is simulated, and creating a payment
     takes as long as TrueLayer takes.
     """
-    config = {"configurable": {"thread_id": thread_id}}
+    config = run_config(thread_id)
     yield sse({"event": "thread", "thread_id": thread_id})
 
     try:
@@ -419,7 +429,7 @@ def decide_stream(decision: Decision) -> StreamingResponse:
 def decide(decision: Decision, request: Request) -> JSONResponse:
     if decision.decision not in ("approve", "deny"):
         raise HTTPException(400, "decision must be approve or deny")
-    config = {"configurable": {"thread_id": decision.thread_id}}
+    config = run_config(decision.thread_id)
     try:
         state = graph.invoke(Command(resume=decision.decision), config)
     except Exception as exc:  # a thread that no longer exists, most likely
@@ -528,6 +538,76 @@ def internals() -> JSONResponse:
             "vop_provider": os.getenv("VOP_PROVIDER", "stub"),
         }
     )
+
+
+NODE_NAMES = set(STEP_LABELS)
+_trace_cache: dict[str, dict] = {}
+
+
+@app.get("/api/trace/{thread_id}")
+def trace(thread_id: str) -> JSONResponse:
+    """Per-step timings for one run, read from LangSmith.
+
+    The route spine shows what the agent did. This shows how long each step
+    actually took, which is where the difference between local logic and a
+    network call becomes visible. Traces are immutable once written, so the
+    result is cached for the life of the process.
+    """
+    if thread_id in _trace_cache:
+        return JSONResponse(_trace_cache[thread_id])
+
+    if os.getenv("LANGSMITH_TRACING", "").lower() not in ("1", "true"):
+        return JSONResponse({"status": "disabled"})
+
+    try:
+        from langsmith import Client
+
+        client = Client()
+        runs = list(
+            client.list_runs(
+                project_name=os.getenv("LANGSMITH_PROJECT", "payment-agent-prod"),
+                filter=f'and(eq(metadata_key, "thread_id"), eq(metadata_value, "{thread_id}"))',
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 — observability must never break a payment
+        return JSONResponse({"status": "error", "message": str(exc)[:200]})
+
+    spans, roots = [], []
+    for run in sorted(runs, key=lambda r: r.start_time):
+        if not run.end_time:
+            continue                      # still open: the trace is incomplete
+        ms = (run.end_time - run.start_time).total_seconds() * 1000
+        if run.name == "payment-run":
+            roots.append(ms)
+        elif run.name in NODE_NAMES:
+            spans.append({"node": run.name, "label": STEP_LABELS[run.name], "ms": round(ms, 1)})
+
+    # Indexing is not atomic, so a partial trace looks like a short run. The
+    # honest completion signal is a terminal node: every path ends at one of
+    # these, so their absence means spans are still arriving.
+    TERMINAL = {"reconcile", "hold_or_reject", "need_more_info"}
+    complete = any(s["node"] in TERMINAL for s in spans)
+    if not roots or not complete:
+        return JSONResponse({"status": "pending", "found": len(runs), "spans": len(spans)})
+
+    # A node that ran either side of the pause appears twice (human_approval
+    # runs once to ask and once to receive the answer). Sum them so the list
+    # reads as steps rather than as invocations.
+    merged: dict[str, dict] = {}
+    for span in spans:
+        entry = merged.setdefault(span["node"], {**span, "ms": 0.0})
+        entry["ms"] = round(entry["ms"] + span["ms"], 1)
+
+    payload = {
+        "status": "ready",
+        "thread_id": thread_id,
+        "total_ms": round(sum(roots), 1),
+        "roots": len(roots),
+        "spans": list(merged.values()),
+        "project": os.getenv("LANGSMITH_PROJECT", "payment-agent-prod"),
+    }
+    _trace_cache[thread_id] = payload
+    return JSONResponse(payload)
 
 
 @app.get("/callback")
