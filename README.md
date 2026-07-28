@@ -120,3 +120,10 @@ no replay of earlier nodes, and the same holds over HTTP across two requests.
 `RATE_LIMIT_PER_HOUR` is a module-level dict, so the cap is per instance. With five warm instances
 the effective limit is five times what it claims. The `store.py` and `ratelimit.py` pair from the
 agent-payment-authority prototype already solves this against Upstash and should be ported.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
+
+The TrueLayer sandbox credentials, signing keys and database connection are not in this
+repository. To run it you need your own TrueLayer sandbox application and your own Postgres.
