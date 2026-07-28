@@ -32,14 +32,18 @@ class VoPResult:
     matched_name: str | None
     confidence: float
     provider: str
+    reason: str | None = None   # only the semantic adapter fills this
 
     def as_dict(self) -> dict:
-        return {
+        payload = {
             "status": self.status,
             "matched_name": self.matched_name,
             "confidence": round(self.confidence, 3),
             "provider": self.provider,
         }
+        if self.reason:
+            payload["reason"] = self.reason
+        return payload
 
 
 class VoPAdapter(Protocol):
@@ -90,6 +94,84 @@ class StubVoP:
         return VoPResult("NO_MATCH", on_file, ratio, self.PROVIDER)
 
 
+NAME_JUDGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "same_entity": {
+            "type": "string",
+            "enum": ["yes", "probably", "no"],
+            "description": "Whether the two strings name the same legal entity.",
+        },
+        "confidence": {"type": "number", "description": "0 to 1."},
+        "reason": {"type": "string", "description": "One short sentence, no more."},
+    },
+    "required": ["same_entity", "confidence", "reason"],
+    "additionalProperties": False,
+}
+
+NAME_JUDGE_SYSTEM = """You compare a payee name against the name a bank holds for an \
+account, for a payment about to be made in Europe.
+
+Judge only whether the two strings denote the same legal entity. Treat these as the \
+same entity: a legal form written differently or omitted (GmbH, Ltd, Limited, BV, SA), \
+an ampersand against "and", initials against a full first name, a transliteration or a \
+missing diacritic, a well-known abbreviation of the same registered name.
+
+Treat these as different entities: a different company that merely shares a word, a \
+person against a company, or a name that is close only by spelling accident.
+
+You are not deciding whether the payment may proceed. You return a signal; the rules \
+decide. Be conservative: when genuinely unsure, answer "probably" rather than "yes"."""
+
+
+class SemanticVoP:
+    """The stub's directory, with a model judging the near-misses.
+
+    Structure matters here. The deterministic checks run first and settle the
+    cases they can: an unknown account is uncheckable, an exact string match is
+    a MATCH. The model is consulted only for the genuinely ambiguous middle,
+    which is where a string ratio is weakest and language is the actual problem.
+
+    If the model is unavailable, over budget, or fails, this falls back to
+    StubVoP's ratio and the graph behaves exactly as it does today.
+    """
+
+    PROVIDER = "semantic-simulated"
+
+    def __init__(self) -> None:
+        self._stub = StubVoP()
+
+    def verify(self, payee_name: str, account: dict) -> VoPResult:
+        key = (account.get("sort_code"), account.get("account_number"))
+        on_file = self._stub.DIRECTORY.get(key)
+
+        if on_file is None:
+            return VoPResult("MATCH_NOT_POSSIBLE", None, 0.0, self.PROVIDER)
+
+        if payee_name.strip().lower() == on_file.lower():
+            return VoPResult("MATCH", on_file, 1.0, self.PROVIDER)
+
+        from . import llm
+
+        verdict = llm.judge(
+            system=NAME_JUDGE_SYSTEM,
+            prompt=f"Payee name on the instruction: {payee_name}\nName the bank holds: {on_file}",
+            schema=NAME_JUDGE_SCHEMA,
+            max_tokens=1500,
+        )
+
+        if verdict is None:
+            return self._stub.verify(payee_name, account)
+
+        status = {"yes": "PARTIAL", "probably": "PARTIAL", "no": "NO_MATCH"}.get(
+            verdict.get("same_entity"), "NO_MATCH"
+        )
+        confidence = float(verdict.get("confidence") or 0.0)
+        result = VoPResult(status, on_file, confidence, self.PROVIDER)
+        result.reason = verdict.get("reason")  # type: ignore[attr-defined]
+        return result
+
+
 class TrueLayerVoP:
     """Placeholder for the real service. Deliberately raises rather than
     quietly falling back, so nobody ships a demo believing this ran."""
@@ -105,6 +187,9 @@ class TrueLayerVoP:
 
 def get_vop_adapter() -> VoPAdapter:
     """One line to change when the provider ships."""
-    if os.getenv("VOP_PROVIDER", "stub") == "truelayer":
+    provider = os.getenv("VOP_PROVIDER", "stub")
+    if provider == "truelayer":
         return TrueLayerVoP()
+    if provider == "semantic":
+        return SemanticVoP()
     return StubVoP()

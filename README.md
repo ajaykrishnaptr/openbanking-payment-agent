@@ -33,8 +33,8 @@ The build was structured around six things worth understanding properly:
    where it ended, and versioning them so a regression is visible.
 5. **Designing around a capability that does not exist yet.** Verification of Payee is unavailable
    to developers, so the product had to accommodate its absence honestly.
-6. **Where a language model belongs in a money flow.** Currently nowhere near the decision, for
-   reasons set out in [Rules at the decision](#rules-at-the-decision-language-at-the-edges).
+6. **Where a language model belongs in a money flow.** At the edges, advising; never in the
+   decision. See [Rules at the decision](#rules-at-the-decision-language-at-the-edges).
 
 ---
 
@@ -112,9 +112,10 @@ a policy question with an audit trail, so it lives in readable rules in `graph/p
 payee status of `NO_MATCH` stops the run before consent is checked, an amount above the ceiling
 always asks a human, a previously flagged payee escalates.
 
-A model belongs at the edges, parsing free text into a structured instruction and explaining
-outcomes. That is the next addition, and it changes the threat model: today a hidden instruction
-in the payment reference is inert because nothing reads it.
+A model belongs at the edges. The first one is live: `SemanticVoP` judges whether two company
+names denote the same legal entity, and returns a signal the rules then adjudicate (see below).
+Parsing free text into a structured instruction is the next addition, and it changes the threat
+model: today a hidden instruction in the payment reference is inert because nothing reads it.
 
 ---
 
@@ -156,6 +157,27 @@ Three Neon specifics, each of which caused a real failure before being handled:
 
 DDL runs through the **unpooled** string in `scripts/setup_db.py`, because schema changes through
 a transaction-mode pooler are unreliable.
+
+### The model, and where it is allowed to be
+
+`graph/llm.py` is the only place an LLM is called. Three rules make it safe to depend on:
+it is optional (any failure returns no signal and the caller falls back to deterministic
+behaviour), it is bounded (`LLM_MAX_CALLS`, a 20-second timeout, structured output against a
+JSON schema), and it never decides. A model returns a signal; `graph/policy.py` decides.
+
+The one place it runs today is payee matching. `SemanticVoP` settles what it can
+deterministically (an unknown account is uncheckable, an exact string is a MATCH) and asks the
+model only about the ambiguous middle, where a string ratio is weakest and language is the
+actual problem. It catches cases the ratio gets wrong: "Pinguin Pfannkuchen Gesellschaft mbH"
+against "Pinguin Pfannkuchen GmbH" is the same company writing its legal form out in full,
+which the ratio rejects and the model recognises. It also separates "Pinguin Pfannkuchen
+Immobilien GmbH" as a different group company.
+
+`evals_semantic.py` holds those cases and runs the same suite against both adapters, so the
+comparison is visible. It is deliberately separate from `evals.py`: model calls cost money and
+can vary between runs, so they do not belong in the suite that gates every change.
+
+Set `VOP_PROVIDER=semantic` to enable it, `stub` for the deterministic matcher.
 
 ### Verification of Payee, behind an adapter
 
