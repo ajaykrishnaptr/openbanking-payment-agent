@@ -30,6 +30,7 @@ ALLOWED = {
     "graph/policy.py",
     "graph/checkpointer.py",
     "graph/llm.py",
+    "graph/vop.py",
     "api/server.py",
 }
 
@@ -62,7 +63,7 @@ LESSONS = [
         "what": "add_conditional_edges takes a function that returns the name of the next "
                 "node. That function is the branch.",
         "why": "This is the rule that decides whether money moves without a person. It is "
-               "three lines of if/else over state — auditable, replayable, and testable "
+               "three lines of if/else over state, so it can be replayed and tested "
                "without a model in the loop.",
         "file": "graph/app.py",
         "symbol": "after_risk",
@@ -73,18 +74,32 @@ LESSONS = [
         "what": "A branch can route straight to a terminal node instead of carrying on.",
         "why": "A payee that does not match never reaches consent, and never reaches a "
                "human. Nobody should be asked to approve a payment the check already "
-               "failed — that is how rubber-stamping starts.",
+               "failed, because that is how rubber-stamping starts.",
         "file": "graph/app.py",
         "symbol": "after_verify",
     },
     {
-        "id": "model-signals",
-        "concept": "The model signals, the rules decide",
-        "what": "Nothing stops you calling an LLM inside a routing function. This agent "
-                "does not.",
-        "why": "The model writes flags into state; this function turns them into a decision. "
-               "An auditor can be shown why one payment auto-approved and an identical one "
-               "did not, which is not true of a branch a model chose.",
+        "id": "model-placement",
+        "concept": "Where the model is allowed to run",
+        "what": "There is an LLM in this agent, and it sits in exactly one place: deciding "
+                "whether two spellings of a company name are the same company.",
+        "why": "The deterministic checks run first and settle what they can: an unknown "
+               "account is uncheckable, an exact string match is a MATCH. The model is asked "
+               "only about the ambiguous middle, where a string ratio is weakest and language "
+               "is the actual problem. If it is unavailable, over budget or malformed, the "
+               "run falls back to the ratio rather than failing.",
+        "file": "graph/vop.py",
+        "symbol": "SemanticVoP",
+    },
+    {
+        "id": "rules-decide",
+        "concept": "The model never decides",
+        "what": "The model returns a verdict about a name. It does not score risk, and it "
+                "does not choose a branch.",
+        "why": "Risk is scored here, in rules over the amount, the payee history and the "
+               "verdict the check produced. Nothing in this function calls a model, which is "
+               "what lets an auditor be shown why one payment auto-approved and an identical "
+               "one did not.",
         "file": "graph/policy.py",
         "symbol": "assess_risk",
     },

@@ -35,14 +35,14 @@
   <section class="lede">
     <h1>The concepts this agent runs on.</h1>
     <p>
-      LangGraph gives you a state machine with a checkpointer. That is most of what an agent
-      handling money needs, and almost none of what people mean when they say agent. Below are
-      the parts this one actually uses.
+      LangGraph gives you a state machine with a checkpointer. That covers most of what an
+      agent handling money needs, and almost none of a free-running tool-calling loop. Below
+      are the parts this one uses.
     </p>
     <p class="disclosure">
-      Every excerpt is read out of the running deployment and located by parsing the file, so
-      the code here is the code that ran. Nothing is pasted. Concepts this repository does not
-      demonstrate are left out rather than described.
+      The page reads every excerpt out of the running deployment and finds it by parsing the
+      file, so the code here is the code that ran. Nothing is pasted, and concepts this
+      repository does not demonstrate are left out instead of described.
     </p>
   </section>
 
@@ -56,6 +56,24 @@
     get_state_history are all real LangGraph, and none of them appear here because this agent
     does not use them.
   </p>
+
+  <section class="watch">
+    <p class="eyebrow" aria-hidden="true">Where this clicked</p>
+    <h2 class="visually-hidden">A video that covers the rest</h2>
+    <a class="watch-card"
+       href="https://www.youtube.com/watch?v=1w5cCXlh7JQ&amp;t=1545s"
+       target="_blank" rel="noopener">
+      <span class="watch-thumb">
+        <img src="https://img.youtube.com/vi/1w5cCXlh7JQ/maxresdefault.jpg"
+             alt="" width="1280" height="720" loading="lazy" decoding="async">
+      </span>
+      <span class="watch-meta">
+        <span class="watch-title">LangGraph Tutorial - How to Build Advanced AI Agent Systems</span>
+        <span class="watch-channel">Tech With Tim</span>
+        <span class="watch-cue">Opens at 25:45</span>
+      </span>
+    </a>
+  </section>
 
 </main>
 
@@ -83,13 +101,14 @@ fetch("/api/learn")
         ${l.missing
           ? `<p class="lesson-gone">This lesson points at <span class="mono">${escapeHtml(l.symbol)}</span>
              in <span class="mono">${escapeHtml(l.file)}</span>, which is no longer there.</p>`
-          : `<figure class="lesson-source">
-               <figcaption class="lesson-path">
-                 <span class="mono">${escapeHtml(l.file)}:${l.line}</span>
+          : `<details class="lesson-source">
+               <summary class="lesson-path">
                  <span class="lesson-symbol mono">${escapeHtml(l.symbol)}</span>
-               </figcaption>
+                 <span class="mono lesson-loc">${escapeHtml(l.file)}:${l.line}</span>
+                 <span class="lesson-count">${l.code.split("\n").length} lines</span>
+               </summary>
                <pre><code>${escapeHtml(l.code)}</code></pre>
-             </figure>`}
+             </details>`}
       </li>
     `).join("");
   })
