@@ -52,9 +52,25 @@ headings, `pretty` on prose.
 
 Two columns above 900px: the intent form on the left at a fixed comfortable width, the agent's
 run and its narration on the right. Below 900px they stack, form first, and the run region
-scrolls into view when it updates. No cards for the run steps; they are a bordered list with
-generous leading, since a card grid would be the lazy answer here. The approval card is the
-one genuinely raised surface on the page, which is what makes it read as the moment.
+scrolls into view when it updates. The approval card is the one genuinely raised surface on the
+page, which is what makes it read as the moment.
+
+The run itself is the graph, laid out from the compiled topology rather than positioned by hand.
+Nodes are ranked by longest path from the entry, so a node always draws below everything that can
+reach it; the main line runs down the left and the two nodes that end a run take a column of their
+own on the right, since four of the six branch edges converge on one of them. The page then reads
+as onward, or out.
+
+Nodes are positioned HTML over an SVG layer carrying nothing but the edges. That keeps the boxes
+on the same type and colour rules as the rest of the page and leaves every edge separately
+addressable, which is what lets one light up while its sibling dims. Edges are orthogonal elbows
+with a 9px radius rather than curves, because this is a schematic of a decision and should read
+like one. Vertical edges run down the marker column rather than the centre of the box, which
+leaves the width beside them free for the label saying why. An edge that skips a rank bows out to
+the left instead of running through the node it skips.
+
+Below 900px the graph keeps its width and scrolls inside its own container. The page body never
+scrolls sideways.
 
 Semantic z-index scale: `--z-sticky: 10`, `--z-overlay: 20`, `--z-toast: 30`. No arbitrary
 values.
@@ -70,8 +86,14 @@ crossfade. Content is visible by default and never gated behind a transition cla
 
 - **Field** — label above input, mono for numeric fields, error text below tied by
   `aria-describedby`.
-- **Run step** — glyph, node name, one-line result, optional detail. Four states: pending,
-  running, done, refused.
+- **Graph node** — marker, node label, one-line detail. Six states: idle, running, done,
+  attention, refused, waived, and skipped for a node the run never reached. The detail is one
+  line and truncates, carrying its full text as a tooltip.
+- **Graph edge** — hairline, arrowhead, and the rule that fired. Three states: idle before the
+  run reaches it, taken, and untaken once a sibling edge fires. Untaken stays drawn as a dashed
+  hairline rather than disappearing, because the reader needs to see the branch existed and was
+  refused. Taken is toned by where it leads: green onward, amber into the human, red into a stop,
+  so a refusal never arrives in the same colour as a payment continuing.
 - **Approval card** — the raised surface. Prose explanation first, the reasons as a plain
   list, the two actions last, with the destructive one visually secondary but equally
   reachable by keyboard.

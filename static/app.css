@@ -417,6 +417,164 @@ button.link:hover { border-bottom-color: var(--primary); }
 
 @keyframes ring-spin { to { transform: rotate(360deg); } }
 
+/* ------------------------------------------------------------- graph */
+
+/* The same route as a graph, laid out from the compiled topology. Nodes are
+   positioned HTML so they inherit the type and colour rules already in this
+   file; the SVG underneath carries nothing but the edges. */
+
+.route-note {
+  margin: -0.4rem 0 1.2rem;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+}
+
+/* The graph replaces the station list inside the same element, so this has to
+   undo the list styling the fallback needed. Narrow screens scroll it rather
+   than squeeze the boxes below a readable width. */
+.graph-scroll {
+  margin: 0;
+  padding: 0.25rem;
+  margin-inline: -0.25rem;
+  list-style: none;
+  overflow-x: auto;
+}
+
+.graph {
+  position: relative;
+  margin: 0 auto;
+}
+
+.graph-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.gedge-line { fill: none; stroke: var(--line-strong); stroke-width: 1; }
+.gedge-head { fill: var(--line-strong); stroke: none; }
+
+.gedge-line, .gedge-head {
+  transition: stroke 220ms var(--ease), fill 220ms var(--ease), opacity 220ms var(--ease);
+}
+
+/* An edge the run took. Toned by where it leads, so a refusal never arrives
+   in the same colour as a payment continuing. */
+[data-edge][data-state="taken"][data-tone="done"] { stroke: var(--primary); }
+.gedge-head[data-state="taken"][data-tone="done"] { fill: var(--primary); stroke: none; }
+[data-edge][data-state="taken"][data-tone="attention"] { stroke: var(--attention); }
+.gedge-head[data-state="taken"][data-tone="attention"] { fill: var(--attention); stroke: none; }
+[data-edge][data-state="taken"][data-tone="refused"] { stroke: var(--refuse); }
+.gedge-head[data-state="taken"][data-tone="refused"] { fill: var(--refuse); stroke: none; }
+
+.gedge-line[data-state="taken"] { stroke-width: 1.75; }
+
+/* The branch the agent turned down. Still drawn, because the reader needs to
+   see that it existed and was rejected. */
+.gedge-line[data-state="untaken"] { stroke: var(--line); stroke-dasharray: 3 4; }
+.gedge-head[data-state="untaken"] { fill: var(--line); }
+
+.gedge-label {
+  position: absolute;
+  margin: 0;
+  font-size: 0.73rem;
+  line-height: 1.35;
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  animation: edge-label 200ms var(--ease) both;
+}
+
+.gedge-label[data-tone="attention"] { color: var(--attention); }
+.gedge-label[data-tone="refused"] { color: var(--refuse); }
+
+@keyframes edge-label { from { opacity: 0; transform: translateY(-3px); } }
+
+.gnode {
+  position: absolute;
+  display: grid;
+  grid-template-columns: 11px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.6rem;
+  align-content: center;
+  height: 58px;
+  padding: 0 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  transition: border-color 200ms var(--ease), background 200ms var(--ease);
+}
+
+.gnode .marker {
+  grid-row: 1 / 3;
+  align-self: center;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  background: var(--bg);
+}
+
+.gnode .label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--ink-muted);
+  text-wrap: balance;
+  transition: color 200ms var(--ease);
+}
+
+.gnode .detail {
+  margin: 0.1rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gnode .detail:empty { display: none; }
+
+.gnode[data-state="done"] { border-color: var(--line-strong); }
+.gnode[data-state="done"] .marker { border-color: var(--primary); background: var(--primary); }
+.gnode[data-state="done"] .label { color: var(--ink); }
+
+.gnode[data-state="attention"] { border-color: var(--attention-line); background: var(--attention-bg); }
+.gnode[data-state="attention"] .marker { border-color: var(--attention); background: var(--attention); }
+.gnode[data-state="attention"] .label { color: var(--ink); }
+.gnode[data-state="attention"] .detail { color: var(--attention); }
+
+.gnode[data-state="refused"] { border-color: var(--refuse); background: var(--refuse-bg); }
+.gnode[data-state="refused"] .marker { border-color: var(--refuse); background: var(--refuse); }
+.gnode[data-state="refused"] .label { color: var(--ink); }
+.gnode[data-state="refused"] .detail { color: var(--refuse); }
+
+.gnode[data-state="running"] { border-color: var(--primary); }
+.gnode[data-state="running"] .marker {
+  border-color: var(--primary);
+  border-top-color: transparent;
+  animation: ring-spin 700ms linear infinite;
+}
+.gnode[data-state="running"] .label { color: var(--ink); }
+.gnode[data-state="running"] .detail { font-style: italic; }
+
+.gnode[data-state="waived"] .marker { border-color: var(--primary); border-style: dashed; }
+.gnode[data-state="waived"] .label { color: var(--ink); }
+.gnode[data-state="waived"] .detail { color: var(--ink-muted); font-style: italic; }
+
+.gnode[data-state="skipped"] { border-style: dashed; }
+.gnode[data-state="skipped"] .label { color: var(--ink-faint); font-weight: 400; }
+.gnode[data-state="skipped"] .detail { color: var(--ink-faint); }
+.gnode[data-state="skipped"] .marker { border-color: var(--line); border-style: dashed; }
+
 /* The station where a human is the decision, marked before it happens. */
 .spine .station-human .label::after {
   content: "you";
@@ -647,11 +805,14 @@ button.link:hover { border-bottom-color: var(--primary); }
 
   /* The marker stops turning but still reads as in-progress: a dashed ring
      plus the word "running" beside it, which was always there. */
-  .spine li[data-state="running"] .marker {
+  .spine li[data-state="running"] .marker,
+  .gnode[data-state="running"] .marker {
     animation: none;
     border-style: dashed;
     border-top-color: var(--primary);
   }
+
+  .gedge-label { animation: fade-in 1ms linear both; }
 }
 
 /* ---------------------------------------------------------- callback */

@@ -5,7 +5,6 @@ const form = document.getElementById("intent-form");
 const runBtn = document.getElementById("run-btn");
 const formError = document.getElementById("form-error");
 const stepsEl = document.getElementById("steps");
-const emptyEl = document.getElementById("run-empty");
 const approvalSlot = document.getElementById("approval-slot");
 const resultSlot = document.getElementById("result-slot");
 const modeFlag = document.getElementById("mode-flag");
@@ -124,6 +123,8 @@ async function streamRun(url, body) {
 function handleEvent(event) {
   if (event.event === "start") {
     addRunningStep(event.node, event.label);
+  } else if (event.event === "edge") {
+    lightEdge(event.from, event.to, event.why);
   } else if (event.event === "done") {
     completeStep(event);
   } else if (event.event === "waiting") {
@@ -141,16 +142,27 @@ function fail(message) {
 }
 
 /* The stations are already in the page. Running the agent lights them up,
-   rather than appending rows to an empty list. */
+   rather than appending rows to an empty list. Both the fallback list and the
+   drawn graph use the same data-node and data-state contract, so everything
+   below works whichever one is on screen. */
 function station(node) {
-  return stepsEl.querySelector(`li[data-node="${node}"]`);
+  return stepsEl.querySelector(`[data-node="${node}"]`);
+}
+
+/* A node in the graph is one line wide, so a long detail is cut with an
+   ellipsis. Carrying the full text as a tooltip means nothing is lost. */
+function setDetail(li, text) {
+  const el = li.querySelector(".detail");
+  el.textContent = text;
+  if (text) el.title = text;
+  else el.removeAttribute("title");
 }
 
 function addRunningStep(node, label) {
   const li = station(node);
   if (!li) return null;
   li.dataset.state = "running";
-  li.querySelector(".detail").textContent = "running";
+  setDetail(li, "running");
   return li;
 }
 
@@ -158,14 +170,14 @@ function completeStep(step) {
   const li = station(step.node);
   if (!li) return;
   li.dataset.state = step.tone;
-  li.querySelector(".detail").textContent = step.detail || "";
+  setDetail(li, step.detail || "");
 }
 
 function removeStep(node) {
   const li = station(node);
   if (li && li.dataset.state === "running") {
     li.dataset.state = "attention";
-    li.querySelector(".detail").textContent = "waiting for you";
+    setDetail(li, "waiting for you");
   }
 }
 
@@ -177,7 +189,7 @@ function markStopped(view) {
   const stopped = view.steps.find((s) => s.node === "hold_or_reject" || s.node === "need_more_info");
   let passedStop = false;
 
-  stepsEl.querySelectorAll("li").forEach((li) => {
+  stepsEl.querySelectorAll("[data-node]").forEach((li) => {
     const node = li.dataset.node;
     if (reached.has(node)) {
       passedStop = true;
@@ -185,23 +197,30 @@ function markStopped(view) {
     }
     if (stopped) {
       li.dataset.state = "skipped";
-      li.querySelector(".detail").textContent = "not reached";
+      setDetail(li, "not reached");
     }
   });
 
   if (stopped) {
-    const last = [...stepsEl.querySelectorAll("li")].filter((li) => reached.has(li.dataset.node)).pop();
+    const last = [...stepsEl.querySelectorAll("[data-node]")].filter((li) => reached.has(li.dataset.node)).pop();
     if (last) {
       last.dataset.state = "refused";
-      last.querySelector(".detail").textContent = stopped.detail || "stopped here";
+      setDetail(last, stopped.detail || "stopped here");
     }
   }
 }
 
 function resetStations() {
-  stepsEl.querySelectorAll("li").forEach((li) => {
+  stepsEl.querySelectorAll("[data-node]").forEach((li) => {
     li.dataset.state = "idle";
-    li.querySelector(".detail").textContent = "";
+    setDetail(li, "");
+  });
+  stepsEl.querySelectorAll("[data-edge]").forEach((el) => {
+    el.dataset.state = "idle";
+    if (el.classList.contains("gedge-label")) {
+      el.textContent = "";
+      el.hidden = true;
+    }
   });
 }
 
@@ -256,14 +275,19 @@ function renderTracePanel(view) {
 function finish(view) {
   approvalSlot.innerHTML = "";
   resultSlot.innerHTML = "";
-  stepsEl.querySelectorAll('li[data-state="running"]').forEach((li) => {
+  stepsEl.querySelectorAll('[data-node][data-state="running"]').forEach((li) => {
     li.dataset.state = "idle";
-    li.querySelector(".detail").textContent = "";
+    setDetail(li, "");
   });
 
   if (view.status === "waiting_approval") {
     renderApproval(view);
   } else {
+    // The run is over, so every edge it did not take is a road not travelled.
+    // Dimming them is what makes the branch it did take mean something.
+    stepsEl.querySelectorAll('[data-edge][data-state="idle"]').forEach((el) => {
+      el.dataset.state = "untaken";
+    });
     markStopped(view);
     markAutoApproved(view);
     renderResult(view);
@@ -278,7 +302,7 @@ function markAutoApproved(view) {
   const li = station("human_approval");
   if (!li) return;
   li.dataset.state = "waived";
-  li.querySelector(".detail").textContent = "not required for this payment";
+  setDetail(li, "not required for this payment");
 }
 
 function renderApproval(view) {
@@ -517,3 +541,267 @@ function setText(id, value) {
   const el = document.getElementById(id);
   if (el && value != null) el.textContent = value;
 }
+
+/* --------------------------------------------------------------- the graph
+
+   The route is drawn from the compiled graph rather than written into the
+   page, so a node added in graph/app.py appears here without an HTML edit.
+   Nodes are positioned HTML over an SVG layer that carries only the edges:
+   the boxes then inherit the same type and colour rules as everything else,
+   and each edge stays individually addressable so it can light up on its own.
+
+   If the topology cannot be fetched, the station list the HTML shipped with
+   stays exactly as it is and the run still reports every step.             */
+
+const GEOM = { w: 232, wSide: 196, h: 58, rankGap: 46, colGap: 56, padL: 30, padY: 4 };
+
+/* Edges are toned by where they lead, which is known the moment one fires:
+   into a stop is a refusal, into the human is the pause, everything else is
+   the payment continuing. */
+const EDGE_TONE = { hold_or_reject: "refused", need_more_info: "refused", human_approval: "attention" };
+
+function topoOrder(ids, outgoing) {
+  const indegree = new Map(ids.map((id) => [id, 0]));
+  ids.forEach((id) => (outgoing.get(id) || []).forEach((t) => indegree.set(t, (indegree.get(t) || 0) + 1)));
+  const queue = ids.filter((id) => indegree.get(id) === 0);
+  const order = [];
+  while (queue.length) {
+    const id = queue.shift();
+    order.push(id);
+    (outgoing.get(id) || []).forEach((t) => {
+      indegree.set(t, indegree.get(t) - 1);
+      if (indegree.get(t) === 0) queue.push(t);
+    });
+  }
+  return order.length === ids.length ? order : ids;  // a cycle: fall back to input order
+}
+
+function layout(topo) {
+  const ids = topo.nodes.map((n) => n.id);
+  const outgoing = new Map(ids.map((id) => [id, []]));
+  const incoming = new Map(ids.map((id) => [id, []]));
+  topo.edges.forEach((e) => {
+    if (outgoing.has(e.source)) outgoing.get(e.source).push(e.target);
+    if (incoming.has(e.target)) incoming.get(e.target).push(e.source);
+  });
+
+  // Rank by longest path from the entry, the usual layered-graph ranking, so
+  // a node is always drawn below every node that can reach it.
+  const rank = new Map(ids.map((id) => [id, 0]));
+  topoOrder(ids, outgoing).forEach((id) => {
+    const preds = incoming.get(id) || [];
+    if (preds.length) rank.set(id, Math.max(...preds.map((p) => rank.get(p) + 1)));
+  });
+
+  // The main line is the longest path itself. Anything off it that ends the
+  // run is a stop, and stops go in the right-hand column: four of the six
+  // branch edges converge on one, so the page reads as "onward, or out".
+  const deepest = ids.reduce((a, b) => (rank.get(b) > rank.get(a) ? b : a), ids[0]);
+  const mainLine = new Set([deepest]);
+  let cursor = deepest;
+  while (true) {
+    const up = (incoming.get(cursor) || []).find((p) => rank.get(p) === rank.get(cursor) - 1);
+    if (!up) break;
+    mainLine.add(up);
+    cursor = up;
+  }
+
+  const pos = new Map();
+  const taken = new Set();
+  ids.slice().sort((a, b) => rank.get(a) - rank.get(b)).forEach((id) => {
+    const col = !mainLine.has(id) && (outgoing.get(id) || []).length === 0 ? 1 : 0;
+    // One node per cell. Two nodes landing on the same rank in the same column
+    // would silently overlap, so the later one drops to the next free row.
+    let r = rank.get(id);
+    while (taken.has(`${r}:${col}`)) r += 1;
+    taken.add(`${r}:${col}`);
+
+    const x = GEOM.padL + (col === 0 ? 0 : GEOM.w + GEOM.colGap);
+    const w = col === 0 ? GEOM.w : GEOM.wSide;
+    pos.set(id, { col, row: r, x, w, y: GEOM.padY + r * (GEOM.h + GEOM.rankGap), cx: x + w / 2 });
+  });
+
+  const rows = Math.max(...[...pos.values()].map((p) => p.row));
+  return {
+    pos,
+    width: GEOM.padL + GEOM.w + GEOM.colGap + GEOM.wSide,
+    height: GEOM.padY * 2 + rows * (GEOM.h + GEOM.rankGap) + GEOM.h,
+  };
+}
+
+/* Orthogonal elbows with a small radius, rather than curves. This is a
+   schematic of a decision, and it should read like one. */
+function roundedPath(points, r = 9) {
+  let d = `M ${points[0][0]} ${points[0][1]}`;
+  for (let i = 1; i < points.length - 1; i++) {
+    const [px, py] = points[i - 1], [cx, cy] = points[i], [nx, ny] = points[i + 1];
+    const back = Math.hypot(cx - px, cy - py), fwd = Math.hypot(nx - cx, ny - cy);
+    if (!back || !fwd) continue;
+    const r1 = Math.min(r, back / 2), r2 = Math.min(r, fwd / 2);
+    d += ` L ${cx - ((cx - px) / back) * r1} ${cy - ((cy - py) / back) * r1}`;
+    d += ` Q ${cx} ${cy} ${cx + ((nx - cx) / fwd) * r2} ${cy + ((ny - cy) / fwd) * r2}`;
+  }
+  const end = points[points.length - 1];
+  return `${d} L ${end[0]} ${end[1]}`;
+}
+
+function arrowhead(x, y, dir) {
+  const s = 4.5, b = s * 1.7;
+  return dir === "down"
+    ? `M ${x} ${y} L ${x - s} ${y - b} L ${x + s} ${y - b} Z`
+    : `M ${x} ${y} L ${x - b} ${y - s} L ${x - b} ${y + s} Z`;
+}
+
+/* Vertical edges run down the marker column rather than the centre of the box,
+   which leaves the width beside them free for the label saying why. */
+const SPINE_X = 17.5;
+
+/* Three shapes of edge, and the middle one is the interesting one: an edge
+   that skips a rank is the agent bypassing a step, so it bows out to the left
+   instead of running straight through the node it is skipping. */
+function edgeGeometry(edge, pos, gutterIndex) {
+  const a = pos.get(edge.source), b = pos.get(edge.target);
+  if (!a || !b) return null;
+  const midA = a.y + GEOM.h / 2, midB = b.y + GEOM.h / 2;
+
+  if (a.col === b.col && b.row === a.row + 1) {
+    return {
+      d: roundedPath([[a.x + SPINE_X, a.y + GEOM.h], [b.x + SPINE_X, b.y]]),
+      head: arrowhead(b.x + SPINE_X, b.y, "down"),
+    };
+  }
+
+  if (a.col === b.col) {
+    const lane = GEOM.padL - 21;
+    return {
+      d: roundedPath([[a.x, midA], [lane, midA], [lane, midB], [b.x, midB]]),
+      head: arrowhead(b.x, midB, "right"),
+    };
+  }
+
+  // Into the stop column. Leaving from the foot of the source rather than its
+  // side keeps this clear of any node sharing the source's row, and each edge
+  // gets a vertical lane of its own so the three that converge on the same
+  // stop do not lie on top of one another and read as a single arrow.
+  const gutter = GEOM.padL + GEOM.w + 13 + gutterIndex * 11;
+  const drop = a.y + GEOM.h + 14;
+  return {
+    d: roundedPath([
+      [a.x + a.w - 10, a.y + GEOM.h], [a.x + a.w - 10, drop],
+      [gutter, drop], [gutter, midB], [b.x, midB],
+    ]),
+    head: arrowhead(b.x, midB, "right"),
+  };
+}
+
+function renderGraph(topo) {
+  if (!topo.nodes?.length || !topo.entry) return false;
+  const { pos, width, height } = layout(topo);
+
+  const frame = document.createElement("div");
+  frame.className = "graph";
+  frame.style.width = `${width}px`;
+  frame.style.height = `${height}px`;
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "graph-edges");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("aria-hidden", "true");
+
+  let gutterIndex = 0;
+  topo.edges.forEach((edge) => {
+    const across = pos.get(edge.source)?.col !== pos.get(edge.target)?.col;
+    const geometry = edgeGeometry(edge, pos, across ? gutterIndex++ : 0);
+    if (!geometry) return;
+    const key = `${edge.source}|${edge.target}`;
+
+    [["gedge-line", geometry.d], ["gedge-head", geometry.head]].forEach(([cls, d]) => {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      el.setAttribute("class", cls);
+      el.setAttribute("d", d);
+      el.dataset.edge = key;
+      el.dataset.state = "idle";
+      el.dataset.tone = EDGE_TONE[edge.target] || "done";
+      svg.appendChild(el);
+    });
+
+    // The reason the run took this edge. Only one conditional edge can fire
+    // per node, so a slot is never contested: an edge continuing down the
+    // column writes beside its own line, one crossing to a stop writes in the
+    // open space above the stop it is heading for.
+    const a = pos.get(edge.source), b = pos.get(edge.target);
+    const label = document.createElement("p");
+    label.className = "gedge-label";
+    label.dataset.edge = key;
+    label.dataset.state = "idle";
+    label.dataset.tone = EDGE_TONE[edge.target] || "done";
+    label.hidden = true;
+    if (across) {
+      label.style.cssText = `left:${b.x}px;top:${b.y - 34}px;width:${b.w}px`;
+    } else {
+      label.style.cssText = `left:${a.x + 38}px;top:${a.y + GEOM.h + 5}px;width:195px`;
+    }
+    frame.appendChild(label);
+  });
+
+  frame.insertBefore(svg, frame.firstChild);
+
+  topo.nodes.forEach((node) => {
+    const p = pos.get(node.id);
+    if (!p) return;
+    const el = document.createElement("div");
+    el.className = "gnode";
+    el.dataset.node = node.id;
+    el.dataset.state = "idle";
+    el.setAttribute("role", "listitem");
+    el.style.cssText = `left:${p.x}px;top:${p.y}px;width:${p.w}px`;
+    el.innerHTML = `<span class="marker" aria-hidden="true"></span>
+      <p class="label"></p><p class="detail"></p>`;
+    el.querySelector(".label").textContent = node.label;
+    frame.appendChild(el);
+  });
+
+  // Swapping the class as well as the children: the fallback list draws its
+  // own connecting rule, which would run straight down through the graph.
+  stepsEl.replaceChildren(frame);
+  stepsEl.className = "graph-scroll";
+  stepsEl.setAttribute("role", "list");
+  return true;
+}
+
+function lightEdge(from, to, why) {
+  const key = `${from}|${to}`;
+  const parts = stepsEl.querySelectorAll(`[data-edge="${key}"]`);
+  if (!parts.length) return;
+
+  // The branch not taken is the reason for drawing any of this. Dim the
+  // sibling edges out of the same node as the one taken lights up.
+  stepsEl.querySelectorAll(`[data-edge^="${from}|"]`).forEach((el) => {
+    if (el.dataset.edge !== key && el.dataset.state === "idle") el.dataset.state = "untaken";
+  });
+
+  parts.forEach((el) => {
+    el.dataset.state = "taken";
+    if (el.classList.contains("gedge-label") && why) {
+      el.textContent = why;
+      el.title = why;
+      el.hidden = false;
+    }
+  });
+}
+
+fetch("/api/graph")
+  .then((r) => (r.ok ? r.json() : Promise.reject()))
+  .then((topo) => {
+    if (!renderGraph(topo)) throw new Error("nothing to draw");
+    const drawn = topo.edges.length;
+    setText("route-note",
+      `${topo.nodes.length} nodes and ${drawn} edges, read from the compiled graph. ` +
+      `The ${topo.total_edges - drawn} entry and exit edges are left out.`);
+  })
+  .catch(() => {
+    // The station list the page shipped with is still there and still works,
+    // so the only thing to undo is the caption promising a drawing.
+    const note = document.getElementById("route-note");
+    if (note) note.hidden = true;
+  });

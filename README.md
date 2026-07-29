@@ -56,7 +56,8 @@ check would have been faster to build and worth nothing.
 
 ```
 Browser
-   │  POST /api/run/stream            server-sent events, one per node
+   │  GET  /api/graph                 the topology, so the page draws the real shape
+   │  POST /api/run/stream            server-sent events, one per node and per edge
    ▼
 FastAPI ── LangGraph app
    │
@@ -80,6 +81,28 @@ TrueLayer /v3/payments → hosted page → bank authentication → /callback
 
 Nine nodes, fifteen edges, ten of them conditional. The demo page reports those numbers by
 reading the compiled graph, so they cannot drift from the code.
+
+### Watching it route
+
+The page draws this graph rather than describing it, and it draws it from `graph.get_graph()`
+through `GET /api/graph`, so adding a node changes the picture without anyone editing the HTML.
+Running a payment lights the path taken and dims the branches refused, with the rule that made
+each turn written beside the arrow: the flags from `assess_risk` on the edge to `human_approval`,
+the payee status on the edge to `hold_or_reject`.
+
+Seeing the branch *not* taken is the point. A clean payment under the ceiling lights the edge that
+bypasses `human_approval` entirely, which is the policy working rather than the agent slipping
+past a step.
+
+Edges come from the stream: consecutive nodes are the edge traversed, checked against the compiled
+topology so a replayed node cannot draw an arrow that does not exist. The reason is read from the
+state the source node had just written. A resume seeds its previous node from the stored `trail`,
+because the graph replays from the checkpoint and the edge crossing the interrupt would otherwise
+be the one edge never drawn.
+
+The nine real nodes are drawn; the four edges to and from LangGraph's `__start__` and `__end__`
+markers are left out, and the caption on the page says so. If `/api/graph` cannot be reached the
+page falls back to the plain station list it ships with, and every step still reports.
 
 ### State
 

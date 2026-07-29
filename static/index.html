@@ -104,7 +104,12 @@
 
     <section class="run" aria-labelledby="run-heading">
       <h2 id="run-heading">The route</h2>
-      <p class="route-intro" id="run-empty">Every payment takes this path. The agent can stop at any station, and it stops at the fifth one whenever a decision is yours.</p>
+      <p class="route-intro">
+        Every box is a node in the graph and every arrow an edge it can take. Running a payment
+        lights the path it walked and dims the branches it turned down, with the rule that made
+        each turn written beside the arrow.
+      </p>
+      <p class="route-note" id="route-note">Reading the graph…</p>
 
       <ol class="spine" id="steps" aria-live="polite">
         <li data-node="check_input" data-state="idle">

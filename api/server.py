@@ -95,6 +95,63 @@ STEP_LABELS = {
 }
 
 
+def topology() -> dict:
+    """The graph as the page draws it, read from the compiled graph.
+
+    `__start__` and `__end__` are LangGraph's own entry and exit markers rather
+    than steps the agent takes, and the internals panel has always counted the
+    nine real nodes, so the drawing keeps to the same nine and its caption says
+    how many edges that leaves out.
+    """
+    compiled = graph.get_graph()
+    real = [n for n in compiled.nodes if not n.startswith("__")]
+    drawn = [
+        {"source": e.source, "target": e.target, "conditional": bool(e.conditional)}
+        for e in compiled.edges
+        if not e.source.startswith("__") and not e.target.startswith("__")
+    ]
+    return {
+        "nodes": [{"id": n, "label": STEP_LABELS.get(n, n)} for n in real],
+        "edges": drawn,
+        "total_edges": len(compiled.edges),
+        "entry": next((e.target for e in compiled.edges if e.source == "__start__"), None),
+    }
+
+
+def edge_reason(source: str, target: str, state: dict) -> str:
+    """The rule that sent the run down this edge, in the words of the rule.
+
+    Read from the state the source node had just written. The stream stashes
+    that state rather than reading the checkpoint when the next node starts,
+    because by then the fields this depends on have moved on.
+    """
+    if source == "check_input":
+        if target == "need_more_info":
+            return "missing " + ", ".join(state.get("missing") or [])
+        return "the instruction is complete"
+
+    if source == "verify_payee":
+        return {
+            "MATCH": "the name matches the account",
+            "PARTIAL": "the name is a near match, so a human decides",
+            "NO_MATCH": "the name is not the account holder",
+            "MATCH_NOT_POSSIBLE": "the account cannot be checked at all",
+        }.get((state.get("vop") or {}).get("status"), "")
+
+    if source == "check_consent":
+        status = (state.get("consent") or {}).get("status")
+        return "the consent is valid" if status == "valid" else f"the consent is {status}"
+
+    if source == "assess_risk":
+        flags = state.get("risk_flags") or []
+        return "; ".join(flags) if flags else "nothing flagged, and under the ceiling"
+
+    if source == "human_approval":
+        return "you approved it" if state.get("human_decision") == "approve" else "you declined it"
+
+    return ""
+
+
 def describe_one(node: str, state: dict) -> dict:
     """One finished node, with the detail that makes it meaningful rather
     than a tick. Shared by the batch response and the stream."""
@@ -356,6 +413,15 @@ def stream_graph(thread_id: str, graph_input) -> Iterator[str]:
     config = run_config(thread_id)
     yield sse({"event": "thread", "thread_id": thread_id})
 
+    edges = {(e["source"], e["target"]) for e in topology()["edges"]}
+
+    # A resume replays from the checkpoint, so the node that ran before the
+    # pause exists only in the stored trail. Without seeding from it, the edge
+    # that crosses the interrupt is the one edge never drawn.
+    stored = dict(graph.get_state(config).values or {})
+    last_node = (stored.get("trail") or [None])[-1]
+    last_state = stored
+
     try:
         for chunk in graph.stream(graph_input, config, stream_mode="debug"):
             kind = chunk.get("type")
@@ -363,6 +429,16 @@ def stream_graph(thread_id: str, graph_input) -> Iterator[str]:
             node = payload.get("name")
 
             if kind == "task":
+                # The edge traversed is the pair of consecutive nodes. Emit it
+                # only when the compiled graph actually has that edge, so a
+                # replayed node cannot draw an arrow that does not exist.
+                if last_node and (last_node, node) in edges:
+                    yield sse({
+                        "event": "edge",
+                        "from": last_node,
+                        "to": node,
+                        "why": edge_reason(last_node, node, last_state),
+                    })
                 yield sse({"event": "start", "node": node, "label": STEP_LABELS.get(node, node)})
 
             elif kind == "task_result":
@@ -378,6 +454,7 @@ def stream_graph(thread_id: str, graph_input) -> Iterator[str]:
                 writes = payload.get("result") or {}
                 state.update(writes if isinstance(writes, dict) else dict(writes))
 
+                last_node, last_state = node, state
                 yield sse({"event": "done", **describe_one(node, state)})
     except Exception as exc:
         yield sse({"event": "error", "message": str(exc)})
@@ -532,6 +609,16 @@ def activity(limit: int = 25) -> JSONResponse:
 @app.get("/activity")
 def activity_page() -> FileResponse:
     return FileResponse(STATIC / "activity.html")
+
+
+@app.get("/api/graph")
+def graph_shape() -> JSONResponse:
+    """The topology the page draws.
+
+    Generated rather than typed, so a node added to graph/app.py appears in the
+    picture without anyone editing the HTML.
+    """
+    return JSONResponse(topology())
 
 
 @app.get("/api/internals")
