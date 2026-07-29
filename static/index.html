@@ -15,13 +15,18 @@
 
 <header class="masthead">
   <div class="wrap masthead-inner">
-    <p class="wordmark">Payment agent</p>
+    <p class="wordmark"><a href="/">Payment agent</a></p>
     <div class="masthead-right">
+      <!-- A status, not a control. It reports the mode the agent is running in
+           and is filled from /api/config, so it must never look clickable. -->
       <p class="sandbox-flag" id="mode-flag">
         <span class="dot" aria-hidden="true"></span>
         <span>TrueLayer sandbox · test money only</span>
       </p>
-      <a class="masthead-link" href="/activity">Activity</a>
+      <nav class="masthead-nav" aria-label="Sections">
+        <a href="/" aria-current="page">Agent</a>
+        <a href="/activity">Activity</a>
+      </nav>
     </div>
   </div>
 </header>

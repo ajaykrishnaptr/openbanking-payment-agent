@@ -1102,7 +1102,17 @@ h2.display {
   flex-wrap: wrap;
 }
 
-.masthead-link {
+/* The two views of the same agent. Both links appear on both pages so the pair
+   reads as a place you can move between, rather than a one-way trip out. */
+.masthead-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.masthead-nav a {
+  position: relative;
+  padding-block: 0.35rem;
   font-family: var(--mono);
   font-size: 0.6875rem;
   letter-spacing: 0.18em;
@@ -1112,7 +1122,21 @@ h2.display {
   transition: color 140ms var(--ease);
 }
 
-.masthead-link:hover { color: var(--ink); }
+.masthead-nav a:hover { color: var(--ink); }
+
+/* The page you are on is marked, and not by colour alone — it carries the rule
+   underneath it as well, so the state survives a monochrome screen. */
+.masthead-nav a[aria-current="page"] { color: var(--primary); }
+
+.masthead-nav a[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.35rem;
+  height: 1px;
+  background: var(--primary);
+}
 
 /* ---------------------------------------------------------------- ticker */
 
