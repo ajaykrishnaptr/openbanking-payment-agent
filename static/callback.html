@@ -14,11 +14,18 @@
 
 <header class="masthead">
   <div class="wrap masthead-inner">
-    <p class="wordmark"><a href="/" style="color:inherit;text-decoration:none">Payment agent</a></p>
-    <p class="sandbox-flag">
-      <span class="dot" aria-hidden="true"></span>
-      <span>TrueLayer sandbox · test money only</span>
-    </p>
+    <p class="wordmark"><a href="/">Payment agent</a></p>
+    <div class="masthead-right">
+      <p class="sandbox-flag">
+        <span class="dot" aria-hidden="true"></span>
+        <span>TrueLayer sandbox · test money only</span>
+      </p>
+      <nav class="masthead-nav" aria-label="Sections">
+        <a href="/">Agent</a>
+        <a href="/activity">Activity</a>
+        <a href="/learn">Learn</a>
+      </nav>
+    </div>
   </div>
 </header>
 
@@ -47,7 +54,10 @@
     <div><dt>Amount</dt><dd id="fact-amount"></dd></div>
   </dl>
 
-  <p class="callback-actions"><a class="sca-link" href="/">Send another instruction</a></p>
+  <p class="callback-actions">
+    <a class="sca-link" href="/">Back to the agent</a>
+    <a class="callback-secondary" href="/activity">See this run in the ledger</a>
+  </p>
 </main>
 
 <script>

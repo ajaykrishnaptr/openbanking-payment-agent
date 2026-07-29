@@ -845,7 +845,29 @@ button.link:hover { border-bottom-color: var(--primary); }
 
 .callback .facts { margin-top: 2rem; }
 
-.callback-actions { margin-top: 2.5rem; }
+/* Two ways on from here: back to the agent, or across to the record of what
+   just happened. The primary is the amber button; the second is quieter so the
+   pair does not read as two equal choices. */
+.callback-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-top: 2.5rem;
+}
+
+.callback-secondary {
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-strong);
+  transition: color 140ms var(--ease), border-color 140ms var(--ease);
+}
+
+.callback-secondary:hover {
+  color: var(--ink);
+  border-bottom-color: var(--primary);
+}
 
 /* --------------------------------------------------------- internals */
 
@@ -1222,3 +1244,99 @@ h2.display {
 .honesty dl > div:nth-child(1) dt { color: var(--pass); }
 .honesty dl > div:nth-child(2) dt { color: var(--attention); }
 .honesty dl > div:nth-child(3) dt { color: var(--refuse); }
+
+/* ------------------------------------------------------------- learn */
+
+.learn { padding-bottom: 2rem; }
+
+.lesson-list {
+  margin: 0 0 3.5rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: lesson;
+}
+
+.lesson {
+  padding-block: clamp(2rem, 4vw, 3rem);
+  border-top: 1px solid var(--line);
+}
+
+.lesson:first-child { border-top: none; padding-top: 0; }
+
+.lesson .eyebrow { margin-bottom: 1rem; }
+
+/* The claim, then the reason it was needed here. The first is the concept in
+   the abstract; the second is why this agent could not do without it. */
+.lesson-what {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--ink);
+  max-width: 62ch;
+  text-wrap: pretty;
+}
+
+.lesson-why {
+  margin: 0 0 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--ink-muted);
+  max-width: 62ch;
+  text-wrap: pretty;
+}
+
+.lesson-source {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.lesson-path {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.lesson-symbol { color: var(--primary); }
+
+/* Code sets its own width. Let it scroll inside the card rather than push the
+   page sideways. */
+.lesson-source pre {
+  margin: 0;
+  padding: 1rem 0.9rem;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.65;
+  color: var(--ink);
+  tab-size: 4;
+}
+
+.lesson-source code { font: inherit; }
+
+.lesson-gone {
+  margin: 0;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--refuse);
+  border-radius: 4px;
+  background: var(--refuse-bg);
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.lesson-loading {
+  padding: 2rem 0;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}

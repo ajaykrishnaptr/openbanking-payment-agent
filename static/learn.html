@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn — the LangGraph concepts this agent runs on</title>
+<meta name="description" content="The LangGraph concepts behind an Open Banking payment agent: state and reducers, conditional edges as product rules, interrupt and resume, and the checkpointer. Each one shown with the code that does it, read from the running deployment.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Work+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <p class="wordmark"><a href="/">Payment agent</a></p>
+    <div class="masthead-right">
+      <p class="sandbox-flag">
+        <span class="dot" aria-hidden="true"></span>
+        <span>TrueLayer sandbox · test money only</span>
+      </p>
+      <nav class="masthead-nav" aria-label="Sections">
+        <a href="/">Agent</a>
+        <a href="/activity">Activity</a>
+        <a href="/learn" aria-current="page">Learn</a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<main class="wrap learn">
+
+  <section class="lede">
+    <h1>The concepts this agent runs on.</h1>
+    <p>
+      LangGraph gives you a state machine with a checkpointer. That is most of what an agent
+      handling money needs, and almost none of what people mean when they say agent. Below are
+      the parts this one actually uses.
+    </p>
+    <p class="disclosure">
+      Every excerpt is read out of the running deployment and located by parsing the file, so
+      the code here is the code that ran. Nothing is pasted. Concepts this repository does not
+      demonstrate are left out rather than described.
+    </p>
+  </section>
+
+  <ol class="lesson-list" id="lessons">
+    <li class="lesson-loading">Reading the source…</li>
+  </ol>
+
+  <p class="colophon-fine">
+    A payments flow is a deliberately small corner of the framework: it runs once, forwards,
+    and stops. Cycles, dynamic fan-out with Send, subgraphs and rewinding a thread with
+    get_state_history are all real LangGraph, and none of them appear here because this agent
+    does not use them.
+  </p>
+
+</main>
+
+<script>
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
+  { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+));
+
+const pad = (n) => String(n).padStart(2, "0");
+
+fetch("/api/learn")
+  .then((r) => r.json())
+  .then((data) => {
+    const list = document.getElementById("lessons");
+    if (!data.lessons || !data.lessons.length) {
+      list.innerHTML = '<li class="lesson-loading">No lessons are configured.</li>';
+      return;
+    }
+    list.innerHTML = data.lessons.map((l, i) => `
+      <li class="lesson" id="${escapeHtml(l.id)}">
+        <p class="eyebrow" aria-hidden="true">${pad(i + 1)} — ${escapeHtml(l.concept)}</p>
+        <h2 class="visually-hidden">${escapeHtml(l.concept)}</h2>
+        <p class="lesson-what">${escapeHtml(l.what)}</p>
+        <p class="lesson-why">${escapeHtml(l.why)}</p>
+        ${l.missing
+          ? `<p class="lesson-gone">This lesson points at <span class="mono">${escapeHtml(l.symbol)}</span>
+             in <span class="mono">${escapeHtml(l.file)}</span>, which is no longer there.</p>`
+          : `<figure class="lesson-source">
+               <figcaption class="lesson-path">
+                 <span class="mono">${escapeHtml(l.file)}:${l.line}</span>
+                 <span class="lesson-symbol mono">${escapeHtml(l.symbol)}</span>
+               </figcaption>
+               <pre><code>${escapeHtml(l.code)}</code></pre>
+             </figure>`}
+      </li>
+    `).join("");
+  })
+  .catch(() => {
+    document.getElementById("lessons").innerHTML =
+      '<li class="lesson-loading">Could not read the source.</li>';
+  });
+</script>
+</body>
+</html>

@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from langgraph.types import Command
 
-from api import ratelimit
+from api import learn, ratelimit
 from graph import audit, policy
 from graph.app import builder
 from graph.checkpointer import describe as checkpointer_name, get_checkpointer
@@ -609,6 +609,18 @@ def activity(limit: int = 25) -> JSONResponse:
 @app.get("/activity")
 def activity_page() -> FileResponse:
     return FileResponse(STATIC / "activity.html")
+
+
+@app.get("/learn")
+def learn_page() -> FileResponse:
+    return FileResponse(STATIC / "learn.html")
+
+
+@app.get("/api/learn")
+def learn_api() -> dict:
+    """The concepts this agent uses, each with its code read from the running
+    deployment. Takes no parameters: the caller cannot name a file."""
+    return learn.lessons()
 
 
 @app.get("/api/graph")
