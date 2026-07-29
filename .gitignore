@@ -6,6 +6,10 @@ secrets/
 # macOS
 .DS_Store
 
+# Personal study notes — kept local, not part of the project.
+LANGGRAPH.md
+LANGGRAPH.docx
+
 # Python
 __pycache__/
 *.pyc
