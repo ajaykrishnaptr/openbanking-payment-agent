@@ -1,32 +1,39 @@
-/* Payment agent demo.
-   Colour strategy: restrained. Tinted neutrals carry the page; green marks
-   what completed, amber marks the one moment a human must act, red marks a
-   refusal. Nothing carries meaning by colour alone. */
+/* Payment agent demo — "Ink & Signal".
+   A near-black warm ink canvas, bone typography, a single amber signal accent,
+   and three state colours: green marks what completed, amber marks the one
+   moment a human must act, red marks a refusal. Nothing carries meaning by
+   colour alone. */
 
 :root {
-  --bg: oklch(0.985 0.003 150);
-  --surface: oklch(0.968 0.005 150);
-  --surface-raised: oklch(1 0 0);
-  --line: oklch(0.90 0.006 150);
-  --line-strong: oklch(0.82 0.008 150);
-  --ink: oklch(0.22 0.02 150);
-  --ink-muted: oklch(0.45 0.018 150);
-  --ink-faint: oklch(0.545 0.014 150);  /* dimmed but still 4.7:1 on bg */
+  --bg: oklch(0.155 0.008 75);
+  --surface: oklch(0.19 0.008 75);
+  --surface-raised: oklch(0.225 0.009 75);
+  --line: oklch(0.29 0.01 78);
+  --line-strong: oklch(0.38 0.012 78);
+  --ink: oklch(0.94 0.012 85);
+  --ink-muted: oklch(0.66 0.014 80);
+  --ink-faint: oklch(0.58 0.013 80);
 
-  --primary: oklch(0.42 0.12 150);
-  --primary-hover: oklch(0.36 0.12 150);
-  --primary-ink: oklch(0.98 0.01 150);
+  /* The signal. Reserved for what the agent is doing now, and for the one
+     button that starts it. */
+  --primary: oklch(0.80 0.13 78);
+  --primary-hover: oklch(0.86 0.08 82);
+  --primary-ink: oklch(0.16 0.01 75);
 
-  --attention: oklch(0.52 0.12 75);
-  --attention-line: oklch(0.78 0.10 80);
-  --attention-bg: oklch(0.975 0.030 85);
+  /* Completed. Distinct from the signal, so "running" and "done" never read
+     as the same thing. */
+  --pass: oklch(0.76 0.14 158);
 
-  --refuse: oklch(0.50 0.17 25);
-  --refuse-bg: oklch(0.972 0.020 25);
+  --attention: oklch(0.78 0.14 68);
+  --attention-line: oklch(0.44 0.09 70);
+  --attention-bg: oklch(0.235 0.030 70);
 
-  --serif: "Newsreader", Georgia, serif;
-  --sans: "Inter", system-ui, -apple-system, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --refuse: oklch(0.68 0.18 25);
+  --refuse-bg: oklch(0.235 0.045 25);
+
+  --serif: "Instrument Serif", Georgia, serif;
+  --sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   --z-sticky: 10;
   --z-overlay: 20;
@@ -90,16 +97,19 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.82rem;
-  color: var(--attention);
-  font-weight: 500;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--primary);
 }
 
 .sandbox-flag .dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--attention);
+  background: var(--primary);
   flex: none;
 }
 
@@ -110,22 +120,26 @@ body {
   max-width: 62ch;
 }
 
+/* Instrument Serif is a display face: one weight, high contrast, tight by
+   nature. It wants to be set large and tracked in, not used at body sizes. */
 h1 {
   font-family: var(--serif);
-  font-size: clamp(2rem, 1.3rem + 3vw, 3.2rem);
+  font-size: clamp(2.4rem, 1.2rem + 4.6vw, 4.5rem);
   font-weight: 400;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  margin: 0 0 1.1rem;
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+  margin: 0 0 1.6rem;
   text-wrap: balance;
 }
 
 .lede p {
-  font-family: var(--serif);
-  font-size: 1.12rem;
-  line-height: 1.65;
-  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 300;
+  font-size: 1.06rem;
+  line-height: 1.7;
+  color: var(--ink-muted);
   margin: 0 0 1rem;
+  max-width: 54ch;
   text-wrap: pretty;
 }
 
@@ -206,7 +220,7 @@ input.mono { font-family: var(--mono); letter-spacing: 0.01em; }
 input:focus-visible {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px oklch(0.42 0.12 150 / 0.16);
+  box-shadow: 0 0 0 3px oklch(0.80 0.13 78 / 0.22);
 }
 
 input::placeholder { color: var(--ink-muted); }
@@ -270,7 +284,7 @@ button.link {
   color: var(--primary);
   background: none;
   border: none;
-  border-bottom: 1px solid oklch(0.42 0.12 150 / 0.3);
+  border-bottom: 1px solid oklch(0.80 0.13 78 / 0.35);
   cursor: pointer;
   text-align: left;
 }
@@ -377,7 +391,7 @@ button.link:hover { border-bottom-color: var(--primary); }
 
 /* states */
 
-.spine li[data-state="done"] .marker { border-color: var(--primary); background: var(--primary); }
+.spine li[data-state="done"] .marker { border-color: var(--pass); background: var(--pass); }
 .spine li[data-state="done"] .label { color: var(--ink); }
 
 .spine li[data-state="attention"] .marker { border-color: var(--attention); background: var(--attention); }
@@ -463,8 +477,8 @@ button.link:hover { border-bottom-color: var(--primary); }
 
 /* An edge the run took. Toned by where it leads, so a refusal never arrives
    in the same colour as a payment continuing. */
-[data-edge][data-state="taken"][data-tone="done"] { stroke: var(--primary); }
-.gedge-head[data-state="taken"][data-tone="done"] { fill: var(--primary); stroke: none; }
+[data-edge][data-state="taken"][data-tone="done"] { stroke: var(--pass); }
+.gedge-head[data-state="taken"][data-tone="done"] { fill: var(--pass); stroke: none; }
 [data-edge][data-state="taken"][data-tone="attention"] { stroke: var(--attention); }
 .gedge-head[data-state="taken"][data-tone="attention"] { fill: var(--attention); stroke: none; }
 [data-edge][data-state="taken"][data-tone="refused"] { stroke: var(--refuse); }
@@ -544,7 +558,7 @@ button.link:hover { border-bottom-color: var(--primary); }
 .gnode .detail:empty { display: none; }
 
 .gnode[data-state="done"] { border-color: var(--line-strong); }
-.gnode[data-state="done"] .marker { border-color: var(--primary); background: var(--primary); }
+.gnode[data-state="done"] .marker { border-color: var(--pass); background: var(--pass); }
 .gnode[data-state="done"] .label { color: var(--ink); }
 
 .gnode[data-state="attention"] { border-color: var(--attention-line); background: var(--attention-bg); }
@@ -598,7 +612,7 @@ button.link:hover { border-bottom-color: var(--primary); }
   background: var(--surface-raised);
   border: 1px solid var(--attention-line);
   border-radius: 4px;
-  box-shadow: 0 1px 2px oklch(0.22 0.02 150 / 0.04), 0 8px 24px oklch(0.22 0.02 150 / 0.06);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.35);
   animation: card-in 260ms var(--ease) both;
 }
 
@@ -722,7 +736,7 @@ button.link:hover { border-bottom-color: var(--primary); }
 }
 
 .result[data-kind="refused"] {
-  border-color: oklch(0.80 0.09 25);
+  border-color: oklch(0.50 0.12 25);
   background: var(--refuse-bg);
 }
 
@@ -876,7 +890,7 @@ button.link:hover { border-bottom-color: var(--primary); }
   border-bottom: 1px solid var(--line);
 }
 
-.split-list li[data-ok="true"] span:last-child { color: var(--primary); }
+.split-list li[data-ok="true"] span:last-child { color: var(--pass); }
 .split-list li[data-ok="false"] span:last-child { color: var(--refuse); }
 
 .internals details { margin-top: 0.5rem; }
@@ -927,7 +941,7 @@ button.link:hover { border-bottom-color: var(--primary); }
   vertical-align: top;
 }
 
-.case-table tr[data-ok="true"] td:last-child { color: var(--primary); }
+.case-table tr[data-ok="true"] td:last-child { color: var(--pass); }
 .case-table tr[data-ok="false"] td:last-child { color: var(--refuse); font-weight: 600; }
 
 .covered-by {
@@ -1035,8 +1049,152 @@ button.link:hover { border-bottom-color: var(--primary); }
   border-radius: 2px;
 }
 
-.pill[data-tone="done"] { color: var(--primary); border-color: var(--primary); }
+.pill[data-tone="done"] { color: var(--pass); border-color: var(--pass); }
 .pill[data-tone="attention"] { color: var(--attention); border-color: var(--attention-line); }
-.pill[data-tone="refused"] { color: var(--refuse); border-color: oklch(0.80 0.09 25); }
+.pill[data-tone="refused"] { color: var(--refuse); border-color: oklch(0.50 0.12 25); }
 
 .masthead .wordmark a { color: inherit; text-decoration: none; }
+
+/* ------------------------------------------------- Ink & Signal additions */
+
+/* Kept in the accessibility tree, out of the visual one. The numbered eyebrow
+   is what a sighted reader sees; the h2 is what a screen reader announces and
+   what aria-labelledby points at. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+h2.display {
+  font-family: var(--serif);
+  font-size: clamp(1.9rem, 1.1rem + 2.6vw, 3rem);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin: 0 0 1.25rem;
+  max-width: 20ch;
+  text-wrap: balance;
+}
+
+/* ------------------------------------------------------ masthead additions */
+
+.masthead-right {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.masthead-link {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: color 140ms var(--ease);
+}
+
+.masthead-link:hover { color: var(--ink); }
+
+/* ---------------------------------------------------------------- ticker */
+
+.ticker {
+  border-block: 1px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;
+  padding-block: 0.9rem;
+  margin-bottom: clamp(2.5rem, 6vw, 4.5rem);
+}
+
+.ticker-track {
+  display: flex;
+  align-items: center;
+  gap: 2.5rem;
+  width: max-content;
+  padding-left: 2.5rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  animation: ticker 42s linear infinite;
+}
+
+.ticker-sep { color: var(--primary); }
+
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* A moving strip is decoration, and decoration should stop when asked. */
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation: none; }
+  .ticker { overflow-x: auto; }
+}
+
+/* -------------------------------------------------------------- colophon */
+
+.colophon {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding-top: 2.5rem;
+  margin-top: 3rem;
+  border-top: 1px solid var(--line);
+}
+
+.colophon-link {
+  font-family: var(--serif);
+  font-size: clamp(1.4rem, 1rem + 1.4vw, 2rem);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+  transition: color 140ms var(--ease);
+}
+
+.colophon-link:hover { color: var(--primary); }
+
+.colophon-note {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.colophon-fine {
+  margin: 1.25rem 0 4rem;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  max-width: 60ch;
+}
+
+/* The three honesty labels carry the same state colours used everywhere else:
+   green for what is real, amber for what stands in, red for what never runs.
+   The words say it too, so the colour is reinforcement and not the message. */
+.honesty dl > div:nth-child(1) dt { color: var(--pass); }
+.honesty dl > div:nth-child(2) dt { color: var(--attention); }
+.honesty dl > div:nth-child(3) dt { color: var(--refuse); }

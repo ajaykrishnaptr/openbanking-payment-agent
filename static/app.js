@@ -118,9 +118,48 @@ async function streamRun(url, body) {
       if (line) handleEvent(JSON.parse(line.slice(6)));
     }
   }
+
+  // The stream closing only means the agent finished, not that the page has
+  // caught up drawing it. Wait for the queue so the caller re-enables the
+  // button against what is on screen.
+  await drawn();
 }
 
+/* Pacing. A dry run finishes in milliseconds, so the whole graph would light in
+   one frame and the agent's reasoning would be invisible. Events are queued and
+   released on a timer, one node at a time.
+
+   This changes only when the page draws a step, never what the agent did or in
+   what order. The timings below are dwell times for reading, not simulated work:
+   the real per-step durations still come from LangSmith. */
+const DWELL_MS = { start: 420, done: 520, edge: 320 };
+
+const stillMoment = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/* Honour the same setting the ticker does. Somebody who has asked for less
+   motion wants the outcome, not the choreography. */
+const pacingOff = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let paceQueue = Promise.resolve();
+
 function handleEvent(event) {
+  paceQueue = paceQueue
+    .then(async () => {
+      applyEvent(event);
+      const dwell = pacingOff ? 0 : DWELL_MS[event.event] || 0;
+      if (dwell) await stillMoment(dwell);
+    })
+    .catch(() => {});
+}
+
+/* Resolves once every queued event has been drawn, so the caller can re-enable
+   the button when the graph has actually finished rather than when the socket
+   closed. */
+function drawn() {
+  return paceQueue;
+}
+
+function applyEvent(event) {
   if (event.event === "start") {
     addRunningStep(event.node, event.label);
   } else if (event.event === "edge") {
@@ -319,7 +358,7 @@ function renderApproval(view) {
     reasons.length === 1
       ? `It will not proceed on its own, because ${reasons[0]}.`
       : reasons.length > 1
-        ? `It will not proceed on its own, for ${numberWord(reasons.length)} reasons.`
+        ? `It will not proceed on its own, for ${reasons.length} reasons.`
         : "It wants a decision from you before this payment goes out.";
 
   const reasonList =
@@ -352,10 +391,6 @@ function renderApproval(view) {
   approvalSlot.appendChild(card);
   card.querySelector(".approve").focus({ preventScroll: true });
   card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-}
-
-function numberWord(n) {
-  return ["zero", "one", "two", "three", "four", "five"][n] || String(n);
 }
 
 function joinReasons(list) {

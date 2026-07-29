@@ -7,7 +7,8 @@
 <meta name="description" content="An AI agent that makes account-to-account payments over Open Banking rails on TrueLayer's sandbox. It verifies the payee, checks consent, scores risk, and stops for a human when a rule says so. Test money only.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Work+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<meta name="color-scheme" content="dark">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
@@ -15,10 +16,13 @@
 <header class="masthead">
   <div class="wrap masthead-inner">
     <p class="wordmark">Payment agent</p>
-    <p class="sandbox-flag" id="mode-flag">
-      <span class="dot" aria-hidden="true"></span>
-      <span>TrueLayer sandbox · test money only</span>
-    </p>
+    <div class="masthead-right">
+      <p class="sandbox-flag" id="mode-flag">
+        <span class="dot" aria-hidden="true"></span>
+        <span>TrueLayer sandbox · test money only</span>
+      </p>
+      <a class="masthead-link" href="/activity">Activity</a>
+    </div>
   </div>
 </header>
 
@@ -41,11 +45,38 @@
       developers yet. Everything else is a real API call.
     </p>
   </section>
+</main>
+
+<!-- The claims that hold whatever the run does. Every item here is a property
+     of the design, not a measurement, so none of it goes stale between runs.
+     The eval count is deliberately absent: that number is read from the API
+     further down the page, and a second hardcoded copy of it up here would be
+     the first thing to drift. -->
+<div class="ticker" aria-hidden="true">
+  <!-- The list is written twice. The animation ends at translateX(-50%), so the
+       second copy is what sits under the viewport at the moment it snaps back —
+       with one copy the strip would scroll into empty space. -->
+  <div class="ticker-track">
+    <span>Consent read, never assumed</span><span class="ticker-sep">◆</span>
+    <span>£1,000 ceiling</span><span class="ticker-sep">◆</span>
+    <span>interrupt() · Command(resume=…)</span><span class="ticker-sep">◆</span>
+    <span>Append-only ledger</span><span class="ticker-sep">◆</span>
+    <span>Payee checked before consent is read</span><span class="ticker-sep">◆</span>
+    <span>Consent read, never assumed</span><span class="ticker-sep">◆</span>
+    <span>£1,000 ceiling</span><span class="ticker-sep">◆</span>
+    <span>interrupt() · Command(resume=…)</span><span class="ticker-sep">◆</span>
+    <span>Append-only ledger</span><span class="ticker-sep">◆</span>
+    <span>Payee checked before consent is read</span><span class="ticker-sep">◆</span>
+  </div>
+</div>
+
+<main class="wrap">
 
   <div class="columns">
 
     <section class="intent" aria-labelledby="intent-heading">
-      <h2 id="intent-heading">The instruction</h2>
+      <p class="eyebrow" aria-hidden="true">01 — The instruction</p>
+      <h2 id="intent-heading" class="visually-hidden">The instruction</h2>
 
       <output class="ledger" id="ledger" for="payee_name amount">
         <span class="ledger-amount" id="ledger-amount">42.00</span>
@@ -103,7 +134,8 @@
     </section>
 
     <section class="run" aria-labelledby="run-heading">
-      <h2 id="run-heading">The route</h2>
+      <p class="eyebrow" aria-hidden="true">02 — The route</p>
+      <h2 id="run-heading" class="visually-hidden">The route</h2>
       <p class="route-intro">
         Every box is a node in the graph and every arrow an edge it can take. Running a payment
         lights the path it walked and dims the branches it turned down, with the rule that made
@@ -149,11 +181,11 @@
   </div>
 
   <section class="internals" aria-labelledby="internals-heading">
-    <h2 id="internals-heading">What is underneath</h2>
+    <p class="eyebrow" aria-hidden="true">03 — What is underneath</p>
+    <h2 id="internals-heading" class="display">Every number below is read from the running system.</h2>
     <p class="route-intro">
-      Every number below is read from the running system: the graph shape from the compiled
-      graph, the eval results from the last recorded experiment. Nothing here is typed into the
-      page by hand.
+      The graph shape comes from the compiled graph, the eval results from the last recorded
+      experiment. Nothing here is typed into the page by hand.
     </p>
 
     <div class="internals-grid">
@@ -178,7 +210,7 @@
         <h3>The evals</h3>
         <p class="stat"><span id="eval-passed">13</span> of <span id="eval-total">13</span> cases passing</p>
         <p>
-          Thirteen scenarios in a versioned LangSmith dataset, scored by five evaluators. Each case
+          13 scenarios in a versioned LangSmith dataset, scored by 5 evaluators. Each case
           asserts where the run ended and which nodes it must never have touched, because the
           question worth asking of an agent with a payment API is whether it ever reached the node
           that moves money.
@@ -210,7 +242,8 @@
   </section>
 
   <section class="honesty">
-    <h2>What is real here, and what is not</h2>
+    <p class="eyebrow" aria-hidden="true">04 — What is real here, and what is not</p>
+    <h2 class="visually-hidden">What is real here, and what is not</h2>
     <dl>
       <div>
         <dt>Real</dt>
@@ -229,10 +262,13 @@
         <dd>The money. Sandbox only.</dd>
       </div>
     </dl>
-    <p class="colophon">
-      <a href="/activity">Every decision this agent has made</a> is recorded in an append-only
-      audit log. Built with Claude Code. The graph, its routing rules and a twelve-scenario eval suite are
-      in the repository.
+    <div class="colophon">
+      <a class="colophon-link" href="/activity">Every decision this agent has made <span aria-hidden="true">→</span></a>
+      <p class="colophon-note">Recorded in an append-only ledger</p>
+    </div>
+    <p class="colophon-fine">
+      Built with Claude Code. The graph, its routing rules and a 13-scenario eval suite
+      are in the repository.
     </p>
   </section>
 
