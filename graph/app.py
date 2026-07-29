@@ -22,9 +22,10 @@ What is real and what is not:
 
 from __future__ import annotations
 
+import operator
 import os
 import uuid
-from typing import TypedDict
+from typing import Annotated, TypedDict
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
@@ -60,11 +61,11 @@ class State(TypedDict, total=False):
     human_decision: str
     execution: dict
     outcome: str
-    trail: list[str]
-
-
-def _step(state: State, name: str) -> list[str]:
-    return state.get("trail", []) + [name]
+    # Append-only, merged by a reducer. A node returns only the step it just
+    # took and LangGraph concatenates; nothing reads the trail to rewrite it.
+    # This is also what makes the key safe if two nodes ever run in parallel,
+    # where a plain key raises rather than pick a winner.
+    trail: Annotated[list[str], operator.add]
 
 
 # ---------------------------------------------------------------- input
@@ -85,7 +86,7 @@ def check_input(state: State) -> dict:
             f"a shorter reference (the bank allows {REFERENCE_MAX} characters, this one has {len(reference)})"
         )
 
-    return {"missing": missing, "trail": _step(state, "check_input")}
+    return {"missing": missing, "trail": ["check_input"]}
 
 
 def have_everything(state: State) -> str:
@@ -97,7 +98,7 @@ def need_more_info(state: State) -> dict:
     # than one that stops.
     return {
         "outcome": f"needs input: {', '.join(state['missing'])}",
-        "trail": _step(state, "need_more_info"),
+        "trail": ["need_more_info"],
     }
 
 
@@ -105,7 +106,7 @@ def need_more_info(state: State) -> dict:
 
 def verify_payee(state: State) -> dict:
     result = get_vop_adapter().verify(state["payee_name"], state["account"])
-    return {"vop": result.as_dict(), "trail": _step(state, "verify_payee")}
+    return {"vop": result.as_dict(), "trail": ["verify_payee"]}
 
 
 def after_verify(state: State) -> str:
@@ -119,7 +120,7 @@ def after_verify(state: State) -> str:
 def check_consent(state: State) -> dict:
     return {
         "consent": policy.check_consent(state.get("user_id", "user-001")),
-        "trail": _step(state, "check_consent"),
+        "trail": ["check_consent"],
     }
 
 
@@ -133,7 +134,7 @@ def assess_risk(state: State) -> dict:
     flags = policy.assess_risk(
         state["payee_name"], state["amount_minor"], state["vop"]["status"]
     )
-    return {"risk_flags": flags, "trail": _step(state, "assess_risk")}
+    return {"risk_flags": flags, "trail": ["assess_risk"]}
 
 
 def after_risk(state: State) -> str:
@@ -153,7 +154,7 @@ def human_approval(state: State) -> dict:
             "why_you_are_being_asked": state["risk_flags"],
         }
     )
-    return {"human_decision": answer, "trail": _step(state, "human_approval")}
+    return {"human_decision": answer, "trail": ["human_approval"]}
 
 
 def after_approval(state: State) -> str:
@@ -174,7 +175,7 @@ def execute_payment(state: State) -> dict:
         return {
             "execution": {"status": "simulated", "payment_id": None, "mode": "dry"},
             "outcome": "would execute (dry run)",
-            "trail": _step(state, "execute_payment"),
+            "trail": ["execute_payment"],
         }
 
     from connectors import get_connector
@@ -216,7 +217,7 @@ def execute_payment(state: State) -> dict:
     return {
         "execution": execution,
         "outcome": f"payment created: {execution.get('status', 'error')}",
-        "trail": _step(state, "execute_payment"),
+        "trail": ["execute_payment"],
     }
 
 
@@ -229,7 +230,7 @@ def reconcile(state: State) -> dict:
 
         _, payload = get_connector("truelayer").get_payment(execution["payment_id"])
         execution["settled_status"] = payload.get("status")
-    return {"execution": execution, "trail": _step(state, "reconcile")}
+    return {"execution": execution, "trail": ["reconcile"]}
 
 
 # ----------------------------------------------------------------- stop
@@ -241,7 +242,7 @@ def hold_or_reject(state: State) -> dict:
         reason = f"consent {state['consent']['status']}"
     else:
         reason = f"payee check {state['vop']['status']}"
-    return {"outcome": f"held: {reason}", "trail": _step(state, "hold_or_reject")}
+    return {"outcome": f"held: {reason}", "trail": ["hold_or_reject"]}
 
 
 builder = StateGraph(State)
