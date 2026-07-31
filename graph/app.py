@@ -27,10 +27,11 @@ import os
 import uuid
 from typing import Annotated, TypedDict
 
+from langgraph.config import RunnableConfig
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
 
-from . import policy
+from . import payees, policy
 from .vop import get_vop_adapter
 
 # "dry" keeps the graph off the network, which is what the evals run against.
@@ -42,6 +43,9 @@ PAYMENTS_MODE = os.getenv("PAYMENTS_MODE", "dry")
 # The HTTP layer passes the live origin per request, so the same code is right
 # on localhost, on a preview URL and in production. This is only the fallback.
 RETURN_URI = os.getenv("RETURN_URI", "https://openbanking-payment-agent.vercel.app/callback")
+# Fixed namespace, so the idempotency key for a run depends on nothing but its
+# thread id. Changing this value would make every in-flight retry look new.
+PAYMENT_NAMESPACE = uuid.UUID("6f1a9d64-1b3f-4a1e-9b0e-7c9a5f2d8e31")
 
 
 class State(TypedDict, total=False):
@@ -163,13 +167,22 @@ def after_approval(state: State) -> str:
 
 # -------------------------------------------------------------- execute
 
-def execute_payment(state: State) -> dict:
+def execute_payment(state: State, config: RunnableConfig) -> dict:
     # Defence in depth. The edges already prevent this, but money movement
     # gets a second lock that does not depend on the graph being wired right.
     approved = state.get("human_decision") == "approve"
     auto_ok = state["vop"]["status"] == "MATCH" and not state.get("risk_flags")
     if not (approved or auto_ok):
         raise RuntimeError("execute_payment reached without approval or a clean auto-approve")
+
+    # The checkpoint for this node is written after it returns, so a crash
+    # between the POST and that write leaves a payment at the bank that the
+    # graph has no record of, and the resume runs this node again. The second
+    # attempt must present the SAME idempotency key or the provider reads it as
+    # a second payment. The thread id is the one value that survives a replay
+    # unchanged, so the key is derived from it rather than generated.
+    thread_id = (config.get("configurable") or {}).get("thread_id")
+    idempotency_key = str(uuid.uuid5(PAYMENT_NAMESPACE, thread_id)) if thread_id else None
 
     if PAYMENTS_MODE != "live":
         return {
@@ -196,6 +209,7 @@ def execute_payment(state: State) -> dict:
         },
         user={"id": str(uuid.uuid4()), "name": "Sandbox User", "email": "psu@example.com"},
         return_uri=state.get("return_uri") or RETURN_URI,
+        idempotency_key=idempotency_key,
     )
 
     execution = {"http_status": status, "mode": "live"}
@@ -230,6 +244,12 @@ def reconcile(state: State) -> dict:
 
         _, payload = get_connector("truelayer").get_payment(execution["payment_id"])
         execution["settled_status"] = payload.get("status")
+
+        # This payee is no longer new, so the next payment to them will not
+        # raise the first-payment flag. Deliberately gated on a payment that
+        # really exists: a dry run decided to pay but did not, and the count
+        # here is a factual claim. Writing it never fails the run.
+        payees.record_payment(state["payee_name"])
     return {"execution": execution, "trail": ["reconcile"]}
 
 
@@ -238,6 +258,16 @@ def reconcile(state: State) -> dict:
 def hold_or_reject(state: State) -> dict:
     if state.get("human_decision") and state["human_decision"] != "approve":
         reason = "human denied"
+        # A person refusing this payee is worth remembering: from here on, every
+        # payment to them asks a person too. Only ever more cautious, and
+        # reversible with payees.clear_flag when the refusal was about the
+        # amount rather than the payee.
+        amount = state.get("amount_minor")
+        payees.flag(
+            state["payee_name"],
+            f"a human denied a payment of {amount / 100:.2f} {state.get('currency', 'GBP')}"
+            if amount else "a human denied a payment",
+        )
     elif state.get("consent", {}).get("status") not in (None, "valid"):
         reason = f"consent {state['consent']['status']}"
     else:

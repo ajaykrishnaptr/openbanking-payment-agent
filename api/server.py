@@ -30,9 +30,12 @@ from pydantic import BaseModel, Field
 from langgraph.types import Command
 
 from api import learn, ratelimit
-from graph import audit, policy
+from graph import audit, payees, policy, tracing
 from graph.app import builder
 from graph.checkpointer import describe as checkpointer_name, get_checkpointer
+
+# Starts the OTLP exporter if one is configured, and does nothing otherwise.
+tracing.setup()
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
@@ -410,7 +413,20 @@ def stream_graph(thread_id: str, graph_input) -> Iterator[str]:
     payee check is instant because it is simulated, and creating a payment
     takes as long as TrueLayer takes.
     """
-    config = run_config(thread_id)
+    # One span for the whole run, and the parent of every span inside it —
+    # including the model call in graph/llm.py. Held open across the yields by
+    # delegating with `yield from`, so it closes when the stream is exhausted.
+    # A no-op unless an OTLP endpoint is configured.
+    with tracing.span(
+        "payment.run" if isinstance(graph_input, dict) else "payment.resume",
+        payment__thread_id=thread_id,
+        payment__mode=os.getenv("PAYMENTS_MODE", "dry"),
+        payment__checkpointer=checkpointer_name(),
+    ) as run:
+        yield from _stream_graph(thread_id, graph_input, config=run_config(thread_id), run=run)
+
+
+def _stream_graph(thread_id: str, graph_input, config: dict, run) -> Iterator[str]:
     yield sse({"event": "thread", "thread_id": thread_id})
 
     edges = {(e["source"], e["target"]) for e in topology()["edges"]}
@@ -457,11 +473,18 @@ def stream_graph(thread_id: str, graph_input) -> Iterator[str]:
                 last_node, last_state = node, state
                 yield sse({"event": "done", **describe_one(node, state)})
     except Exception as exc:
+        run.error(exc)
         yield sse({"event": "error", "message": str(exc)})
         return
 
     snapshot = graph.get_state(config)
     state = dict(snapshot.values)
+    run.set(
+        payment__outcome=state.get("outcome"),
+        payment__vop_status=(state.get("vop") or {}).get("status"),
+        payment__risk_flags=len(state.get("risk_flags") or []),
+        payment__paused=bool(snapshot.tasks and snapshot.tasks[0].interrupts),
+    )
     if snapshot.tasks and snapshot.tasks[0].interrupts:
         state["__interrupt__"] = snapshot.tasks[0].interrupts
     else:
@@ -667,6 +690,8 @@ def internals() -> JSONResponse:
             "checkpointer": checkpointer_name(),
             "stored": stored,
             "vop_provider": os.getenv("VOP_PROVIDER", "stub"),
+            "payee_history": payees.describe(),
+            "tracing": tracing.describe(),
         }
     )
 

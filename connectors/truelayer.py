@@ -91,9 +91,13 @@ class TrueLayerConnector:
 
     # --- create a single immediate payment to an external account (PIS) ---
     def create_payment(self, *, amount_minor: int, currency: str, beneficiary: dict,
-                        user: dict, return_uri: str) -> tuple[int, dict, dict]:
+                        user: dict, return_uri: str,
+                        idempotency_key: str | None = None) -> tuple[int, dict, dict]:
         token = self.access_token()
-        idem = str(uuid.uuid4())
+        # A caller that can be re-run has to supply its own key: a fresh one per
+        # attempt is a fresh payment as far as the provider is concerned. Only
+        # callers that genuinely run once should let this default.
+        idem = idempotency_key or str(uuid.uuid4())
         body = {
             "amount_in_minor": amount_minor,
             "currency": currency,
@@ -238,14 +242,15 @@ class TrueLayerConnector:
     SIGNED = "ES512 Tl-Signature"
 
     def initiate(self, *, amount_minor: int, currency: str, merchant: str,
-                 reference: str, user: dict, return_uri: str) -> dict:
+                 reference: str, user: dict, return_uri: str,
+                 idempotency_key: str | None = None) -> dict:
         status, payload, _ = self.create_payment(
             amount_minor=amount_minor, currency=currency,
             beneficiary={"type": "external_account", "account_holder_name": merchant,
                          "account_identifier": {"type": "sort_code_account_number",
                                                 "sort_code": "040668", "account_number": "00000871"},
                          "reference": reference},
-            user=user, return_uri=return_uri)
+            user=user, return_uri=return_uri, idempotency_key=idempotency_key)
         if status not in (200, 201):
             return {"ok": False, "provider": self.name, "http": status, "error": payload}
         return {"ok": True, "provider": self.name, "id": payload["id"],

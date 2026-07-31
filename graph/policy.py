@@ -9,17 +9,14 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from . import payees
+
 # Stand-in for the consent table. In the real build this is Postgres, and the
 # record binds to a real OAuth authorisation with a real expiry.
 CONSENTS = {
     "user-001": {"consent_id": "cns_9f21", "scope": "payments", "expires": date.today() + timedelta(days=90)},
     "user-expired": {"consent_id": "cns_0001", "scope": "payments", "expires": date.today() - timedelta(days=1)},
 }
-
-# Payees this agent has paid before, and payees a human has flagged.
-# Long-term memory in the spec; a dict until Postgres arrives.
-KNOWN_PAYEES = {"Pinguin Pfannkuchen GmbH"}
-FLAGGED_PAYEES = {"Waffelwerk Bremen GmbH"}
 
 # Above this, a human decides regardless of how clean everything else looks.
 AUTO_APPROVE_CEILING_MINOR = 100_000  # 1,000.00 in major units
@@ -45,9 +42,12 @@ def assess_risk(payee_name: str, amount_minor: int, vop_status: str) -> list[str
         flags.append("the payee name is a near match rather than an exact one")
     if amount_minor > AUTO_APPROVE_CEILING_MINOR:
         flags.append(f"the amount is above the auto-approve ceiling of {AUTO_APPROVE_CEILING_MINOR // 100:,}")
-    if payee_name in FLAGGED_PAYEES:
+    # The payee history outlives the run, so it is read rather than held here.
+    # See payees.py for what happens when that read cannot be made.
+    seen = payees.status(payee_name)
+    if seen == "flagged":
         flags.append("this payee was flagged by a human before")
-    if payee_name not in KNOWN_PAYEES and payee_name not in FLAGGED_PAYEES:
+    if seen is None:
         flags.append("this is the first payment to this payee")
 
     return flags
