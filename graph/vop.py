@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from functools import lru_cache
 from typing import Protocol
 
 
@@ -124,6 +125,19 @@ You are not deciding whether the payment may proceed. You return a signal; the r
 decide. Be conservative: when genuinely unsure, answer "probably" rather than "yes"."""
 
 
+@lru_cache(maxsize=256)
+def _judge_same_entity(payee_name: str, on_file: str) -> dict | None:
+    """Cached so the same instruction-vs-directory pair never asks the model twice."""
+    from . import llm
+
+    return llm.judge(
+        system=NAME_JUDGE_SYSTEM,
+        prompt=f"Payee name on the instruction: {payee_name}\nName the bank holds: {on_file}",
+        schema=NAME_JUDGE_SCHEMA,
+        max_tokens=1500,
+    )
+
+
 class SemanticVoP:
     """The stub's directory, with a model judging the near-misses.
 
@@ -151,14 +165,7 @@ class SemanticVoP:
         if payee_name.strip().lower() == on_file.lower():
             return VoPResult("MATCH", on_file, 1.0, self.PROVIDER)
 
-        from . import llm
-
-        verdict = llm.judge(
-            system=NAME_JUDGE_SYSTEM,
-            prompt=f"Payee name on the instruction: {payee_name}\nName the bank holds: {on_file}",
-            schema=NAME_JUDGE_SCHEMA,
-            max_tokens=1500,
-        )
+        verdict = _judge_same_entity(payee_name, on_file)
 
         if verdict is None:
             return self._stub.verify(payee_name, account)
